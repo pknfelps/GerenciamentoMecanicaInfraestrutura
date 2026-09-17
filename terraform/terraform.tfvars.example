@@ -1,0 +1,20 @@
+aws_region         = "us-east-1"
+cluster_name       = "api-cluster"
+kubernetes_version = null
+vpc_cidr           = "10.0.0.0/16"
+
+public_subnet_cidrs = [
+  "10.0.1.0/24",
+  "10.0.2.0/24"
+]
+
+node_instance_types = ["t3.small"]
+node_capacity_type  = "ON_DEMAND"
+node_min_size       = 1
+node_desired_size   = 2
+node_max_size       = 3
+
+tags = {
+  Environment = "development"
+}
+

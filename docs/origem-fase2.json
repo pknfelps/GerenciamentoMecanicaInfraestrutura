@@ -1,0 +1,67 @@
+{
+  "sourceRepository": "https://github.com/pknfelps/GerenciamentoMecanicaSistema",
+  "sourceCommit": "bd40b14eb90818616533b0ea6043973f240cd0c3",
+  "normalization": "UTF-8 sem BOM; LF",
+  "files": [
+    {
+      "source": "deploy/terraform/.terraform.lock.hcl",
+      "target": "terraform/.terraform.lock.hcl",
+      "sha256": "7011d660628a2de8821eeb12cbb1a721d082db8d04272c1bd0ca1f680d2b4e5a"
+    },
+    {
+      "source": "deploy/terraform/addons.tf",
+      "target": "terraform/addons.tf",
+      "sha256": "18c221aaf7b0911813a3ba8888ce7180d03588fbfbd313688c6e98517f19f432"
+    },
+    {
+      "source": "deploy/terraform/eks.tf",
+      "target": "terraform/eks.tf",
+      "sha256": "17b13eeaf8565083c51d5eeaf2dea9642c4e21a6538eef6a29c4e161f5b62a30"
+    },
+    {
+      "source": "deploy/terraform/iam.tf",
+      "target": "terraform/iam.tf",
+      "sha256": "59dcadd0ce538ce207f3d55d4bbf21c4284f98a3d609df9f7dce88af3834ea0a"
+    },
+    {
+      "source": "deploy/terraform/network.tf",
+      "target": "terraform/network.tf",
+      "sha256": "d92242a7e735744714db712b476395b964c4b5d8d713ac70cc32ac20b495cd76"
+    },
+    {
+      "source": "deploy/terraform/outputs.tf",
+      "target": "terraform/outputs.tf",
+      "sha256": "53d313798e09a5303127d6ed4798393120c95aac29a5ef1e3700c73b4b430269"
+    },
+    {
+      "source": "deploy/terraform/providers.tf",
+      "target": "terraform/providers.tf",
+      "sha256": "9129e7cd00a60b27ed886803dfc47a81637681ccc1a3e42661df0aef446fd9d4"
+    },
+    {
+      "source": "deploy/terraform/terraform.tfvars.example",
+      "target": "terraform/terraform.tfvars.example",
+      "sha256": "69c7d373cb8f4d1302feb75ec575eb27b150bf00ddd83b9a440cbdef6cccbd8f"
+    },
+    {
+      "source": "deploy/terraform/variables.tf",
+      "target": "terraform/variables.tf",
+      "sha256": "43c253578b2072bca214c262bd2a4f739a89b456043aae554b03077913c9ad54"
+    },
+    {
+      "source": "deploy/terraform/versions.tf",
+      "target": "terraform/versions.tf",
+      "sha256": "4168b781cb8c39e15d3a99849f76759db67c652870ee58b1402784b995f18cf2"
+    },
+    {
+      "source": "deploy/kubernetes/svc-gerenciamento-api.yaml",
+      "target": "kubernetes/svc-gerenciamento-api.yaml",
+      "sha256": "7460bbfb7756f1f28b6ffd0abe7a2f27d36c4a998bba1226505b15b3b54f7034"
+    },
+    {
+      "source": "deploy/kubernetes/metrics-server.yaml",
+      "target": "kubernetes/optional/metrics-server.yaml",
+      "sha256": "de80ac86b793c111c6e49de8637013449cf261585ff03e924e78a524242bdcd5"
+    }
+  ]
+}
