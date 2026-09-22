@@ -54,6 +54,14 @@ kubectl kustomize kubernetes
 
 A renderização Kustomize não exige cluster. `init -backend=false` não configura um backend remoto e não comprova permissões/conectividade AWS. Não há aplicação HTTP para executar neste repositório.
 
+O lockfile inclui checksums para Windows AMD64 (desenvolvimento local) e Linux AMD64 (CI). Ao atualizar providers, gere os checksums de ambas as plataformas e inclua a alteração do lockfile na revisão:
+
+```bash
+terraform -chdir=terraform providers lock -platform=windows_amd64 -platform=linux_amd64
+```
+
+Mantenha `-lockfile=readonly` no CI para validar as dependências registradas. Referência: [lock de providers para múltiplas plataformas](https://developer.hashicorp.com/terraform/cli/commands/providers/lock).
+
 ## Configuração existente
 
 Valores atuais em [variables.tf](terraform/variables.tf):
