@@ -74,7 +74,14 @@ Não versionar credenciais, tfvars preenchidos, planos ou estados. Estados locai
 
 ## CI e deploy
 
-Ainda não há workflow neste repositório. A implantação exige configurar estado remoto S3 com locking, identidade OIDC/IAM, ambientes e acesso administrativo ao EKS. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
+O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/`main`, além de permitir acionamento manual. Não há filtro por caminhos, para que os checks obrigatórios também sejam emitidos em mudanças de documentação.
+
+- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação da configuração.
+- `kubernetes-validate`: kubectl 1.36.1 renderiza a composição ativa de `kubernetes/`; não conecta ao cluster nem valida recursos instalados nele.
+
+Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Não executam plan/apply, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
+
+A implantação ainda exige estado remoto S3 com locking, identidade OIDC/IAM, ambientes e acesso administrativo ao EKS. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
 
 A sequência planejada é bootstrap persistente, plataforma/rede/EKS e Service, banco/esquema, API e função, seguida de Gateway e verificações. A inicialização do banco pertence ao repositório de banco. Consulte a [RFC de entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/rfcs/002-ENTREGA.md) para contratos e dependências.
 
