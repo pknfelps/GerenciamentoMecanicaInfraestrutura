@@ -28,3 +28,8 @@ db-secrets.yaml
 artifacts/
 *.nupkg
 *.snupkg
+
+# Bootstrap: configuração local de backend e planos legíveis
+bootstrap/backend.s3.tf
+bootstrap/backend.hcl
+*.tfplan.json

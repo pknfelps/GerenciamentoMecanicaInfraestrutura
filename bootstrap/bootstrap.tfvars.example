@@ -1,0 +1,17 @@
+aws_account_id = "121754142617"
+aws_region     = "us-east-1"
+project_name   = "mecanica"
+
+# Prefixos previstos pelo formato padrão do GitHub (datas/IDs consultados em 2026-09-22).
+# Confirmar o sub real antes do apply caso haja customização/renomeação/migração.
+# Não incluir :environment:; o módulo adiciona hom/prd.
+github_subject_prefixes = {
+  api      = "repo:pknfelps/GerenciamentoMecanicaSistema"
+  infra    = "repo:pknfelps@114608389/GerenciamentoMecanicaInfraestrutura@1375105948"
+  database = "repo:pknfelps@114608389/GerenciamentoMecanicaBancoDados@1375106298"
+  auth     = "repo:pknfelps@114608389/GerenciamentoMecanicaAutenticacao@1375105446"
+}
+
+# A consulta de 2026-09-22 não encontrou providers OIDC na conta.
+# Se outro estado criar o provider antes deste apply, informar seu ARN e conferir audience:
+# existing_github_oidc_provider_arn = "arn:aws:iam::121754142617:oidc-provider/token.actions.githubusercontent.com"

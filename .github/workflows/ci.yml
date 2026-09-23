@@ -26,11 +26,17 @@ jobs:
           terraform_version: 1.15.9
           terraform_wrapper: false
       - name: Check formatting
-        run: terraform -chdir=terraform fmt -check -recursive
-      - name: Initialize providers without backend
-        run: terraform -chdir=terraform init -backend=false -input=false -lockfile=readonly
-      - name: Validate configuration
-        run: terraform -chdir=terraform validate -no-color
+        run: |
+          terraform -chdir=terraform fmt -check -recursive
+          terraform -chdir=bootstrap fmt -check -recursive
+      - name: Initialize providers and validate both roots
+        run: |
+          for root in terraform bootstrap; do
+            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$root" validate -no-color
+          done
+      - name: Test bootstrap plans without AWS access
+        run: terraform -chdir=bootstrap test -no-color
 
   kubernetes-validate:
     runs-on: ubuntu-24.04
