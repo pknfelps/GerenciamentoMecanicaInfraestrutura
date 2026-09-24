@@ -41,6 +41,10 @@ flowchart LR
 
 Este repositório manterá Gateway/VPC Link/composição OpenAPI e plataforma; Lambda pertence à autenticação e Aurora ao banco. O AWS Load Balancer Controller solicitará o NLB a partir do Service; Terraform não deverá gerenciar o mesmo NLB em duplicidade.
 
+## Bootstrap persistente
+
+A unidade [bootstrap/](bootstrap/README.md) prepara buckets de estado/artefatos, ECR e dez roles OIDC por componente/ambiente, com testes de plano sem AWS. Está separada do EKS herdado. Sua aplicação e a migração do estado para S3 são etapas operacionais posteriores; permissões de workloads serão acrescentadas em E2/E3.
+
 ## Pré-requisitos e validação local
 
 Instale Terraform compatível com [versions.tf](terraform/versions.tf), Git e kubectl com Kustomize. O init precisa de rede para baixar o provider. Os comandos abaixo não criam recursos AWS nem aplicam manifestos:
@@ -84,12 +88,12 @@ Não versionar credenciais, tfvars preenchidos, planos ou estados. Estados locai
 
 O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/`main`, além de permitir acionamento manual. Não há filtro por caminhos, para que os checks obrigatórios também sejam emitidos em mudanças de documentação.
 
-- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação da configuração.
+- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação de terraform/ e bootstrap/; testes de plano do bootstrap com provider AWS simulado.
 - `kubernetes-validate`: kubectl 1.36.1 renderiza a composição ativa de `kubernetes/`; não conecta ao cluster nem valida recursos instalados nele.
 
-Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Não executam plan/apply, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
+Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Executam apenas planos simulados nos testes do bootstrap; não executam plan contra AWS, apply, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
 
-A implantação ainda exige estado remoto S3 com locking, identidade OIDC/IAM, ambientes e acesso administrativo ao EKS. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
+O código de bootstrap está preparado; sua aplicação, o estado remoto S3, a ativação OIDC/IAM e o acesso administrativo ao EKS ainda precisam de validação na AWS. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
 
 A sequência planejada é bootstrap persistente, plataforma/rede/EKS e Service, banco/esquema, API e função, seguida de Gateway e verificações. A inicialização do banco pertence ao repositório de banco. Consulte a [RFC de entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/rfcs/002-ENTREGA.md) para contratos e dependências.
 
