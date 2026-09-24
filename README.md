@@ -6,7 +6,7 @@ Mantém a infraestrutura AWS e a plataforma Kubernetes compartilhada pelos compo
 
 A base Terraform da Fase 2 foi transferida e integrada. Ela contém VPC/subnets públicas, Internet Gateway, EKS, IAM, Managed Node Group e add-ons. O Service da API continua como `LoadBalancer`, sem a configuração final de NLB interno.
 
-**Rede privada, API Gateway, VPC Link, bootstrap ECR/S3/OIDC e separação hom/prd ainda não estão implementados.** A configuração atual não deve ser tratada como a implantação final da Fase 3.
+**O bootstrap ECR/S3/OIDC está implementado; rede privada, API Gateway, VPC Link e isolamento dos workloads hom/prd ainda estão pendentes.** A base herdada não representa a implantação final da Fase 3.
 
 ## Estrutura e tecnologias
 
@@ -43,7 +43,7 @@ Este repositório manterá Gateway/VPC Link/composição OpenAPI e plataforma; L
 
 ## Bootstrap persistente
 
-A unidade [bootstrap/](bootstrap/README.md) prepara buckets de estado/artefatos, ECR e dez roles OIDC por componente/ambiente, com testes de plano sem AWS. Está separada do EKS herdado. Sua aplicação e a migração do estado para S3 são etapas operacionais posteriores; permissões de workloads serão acrescentadas em E2/E3.
+A unidade [bootstrap/](bootstrap/README.md) prepara buckets de estado/artefatos, ECR e dez roles OIDC por componente/ambiente, com testes de plano sem AWS. Está separada do EKS herdado. O bootstrap foi aplicado, a migração do estado para S3 foi confirmada e os testes positivos OIDC foram executados. Permissões de workloads serão acrescentadas junto dos respectivos componentes.
 
 ## Pré-requisitos e validação local
 
@@ -93,9 +93,27 @@ O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/
 
 Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Executam apenas planos simulados nos testes do bootstrap; não executam plan contra AWS, apply, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
 
-O código de bootstrap está preparado; sua aplicação, o estado remoto S3, a ativação OIDC/IAM e o acesso administrativo ao EKS ainda precisam de validação na AWS. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
+O bootstrap está provisionado e a autenticação OIDC possui diagnóstico manual. Acesso administrativo ao EKS e permissões efetivas dos workloads ainda precisam de implementação/validação. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
 
 A sequência planejada é bootstrap persistente, plataforma/rede/EKS e Service, banco/esquema, API e função, seguida de Gateway e verificações. A inicialização do banco pertence ao repositório de banco. Consulte a [RFC de entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/rfcs/002-ENTREGA.md) para contratos e dependências.
+
+## Contratos de integração
+
+A [especificação central](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/CONTRATOS_ENTRE_REPOSITORIOS.md) é a fonte dos campos e formatos. Este repositório possui dois produtores: **base** e **gateway**, com estados, roles e namespaces SSM separados. Publicação/consumo dos metadados ainda serão implementados.
+
+| Unidade | Publica | Consome |
+|---|---|---|
+| Bootstrap persistente | Buckets de estado/artefatos, ECR, OIDC, roles e outputs para Environments | Conta/região e repositórios autorizados |
+| Base | /mecanica/<ambiente>/base/v1/: VPC/subnets, cluster/namespace, SGs efetivos, Service/NLB/listener, ECR e referências JWT/observabilidade; release e tentativas | Outputs do bootstrap e configuração operacional por ambiente |
+| Gateway | /mecanica/<ambiente>/gateway/v1/: IDs/stage/URL, VPC Link, OpenAPI composto, release e tentativas | Releases de base/API/função e os dois OpenAPI selecionados |
+
+A base mantém Service/controller/NLB e os secrets compartilhados JWT/New Relic. O banco mantém suas credenciais; API mantém SMTP. Secret é compartilhado por referência ARN, não por valor. A API mantém Deployment/HPA; o controller mantém o NLB solicitado pelo Service.
+
+A base publica ready quando cluster/controller/NLB/listener estão disponíveis, sem aguardar pods da API. Gateway aguarda API e função prontas; cria a permissão para invocar a versão Lambda publicada e compõe o OpenAPI em contracts/gateway/<ambiente>/<deploymentId>/openapi.json, com checksum. Não usa uma cópia manual divergente dos contratos dos backends.
+
+O workflow reutilizável do Gateway pertence a este repositório e será fixado por SHA. Quando API/auth o chamarem, assume a role gateway com o OIDC do chamador. Esse caminho ainda precisa de teste específico; o [diagnóstico manual](.github/workflows/aws-oidc-check.yml) testa base/gateway a partir deste repositório.
+
+Entradas de Environment: AWS_REGION, AWS_BASE_ROLE_ARN, AWS_GATEWAY_ROLE_ARN, TF_STATE_BUCKET e ARTIFACTS_BUCKET. Backend/bootstrap é persistente; descarte de hom/prd preserva esses recursos. Concorrência entre repositórios ainda exige coordenação antes de habilitar mutações simultâneas do mesmo ambiente; lock Terraform e concurrency local não substituem essa coordenação.
 
 ## Desenvolvimento e ambientes
 
