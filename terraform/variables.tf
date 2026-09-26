@@ -1,3 +1,14 @@
+variable "environment" {
+  description = "Ambiente de implantação: hom ou prd."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = contains(["hom", "prd"], var.environment)
+    error_message = "O ambiente deve ser hom ou prd."
+  }
+}
+
 variable "aws_region" {
   description = "Região AWS onde a infraestrutura será criada."
   type        = string

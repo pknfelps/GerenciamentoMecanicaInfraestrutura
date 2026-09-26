@@ -72,6 +72,7 @@ Valores atuais em [variables.tf](terraform/variables.tf):
 
 | Variável | Padrão atual |
 |---|---|
+| `environment` | Obrigatória, sem padrão; aceita somente hom ou prd |
 | `aws_region` | us-east-1 |
 | `cluster_name` | api-cluster |
 | `kubernetes_version` | null; versão não fixada |
@@ -81,6 +82,10 @@ Valores atuais em [variables.tf](terraform/variables.tf):
 | Nós mínimo / desejado / máximo | 1 / 2 / 3 |
 
 Esses valores são herdados. A arquitetura aceita prevê um nó por ambiente e redes próprias de hom/prd; isso ainda precisa ser aplicado ao Terraform. Os [outputs](terraform/outputs.tf) incluem IDs de rede, nomes/endpoint do EKS e ARNs de roles.
+
+A identificação do ambiente é obrigatória em operações como plan/apply: informe `-var="environment=hom"` ou `-var="environment=prd"`, ou configure `environment` no arquivo local de variáveis usando [terraform.tfvars.example](terraform/terraform.tfvars.example) como referência. Use `-input=false` nas execuções automatizadas para falhar quando uma variável obrigatória estiver ausente. `terraform validate` verifica a configuração sem exigir os valores de execução.
+
+Nesta etapa, `environment` valida a identificação informada; ainda não seleciona o backend nem altera nomes/tags dos recursos. A separação efetiva de estados, nomes e redes será implementada nos próximos passos. Não usar somente essa variável para implantar os dois ambientes sobre o mesmo estado.
 
 Não versionar credenciais, tfvars preenchidos, planos ou estados. Estados locais anteriores não foram migrados automaticamente: identificar sua relação com recursos existentes antes de um provisionamento.
 

@@ -1,3 +1,4 @@
+environment        = "hom"
 aws_region         = "us-east-1"
 cluster_name       = "api-cluster"
 kubernetes_version = null
@@ -15,6 +16,6 @@ node_desired_size   = 2
 node_max_size       = 3
 
 tags = {
-  Environment = "development"
+  Environment = "hom"
 }
 
