@@ -4,9 +4,9 @@ Mantém a infraestrutura AWS e a plataforma Kubernetes compartilhada pelos compo
 
 ## Estado da implementação
 
-A base Terraform da Fase 2 foi transferida e integrada. Ela contém VPC/subnets públicas, Internet Gateway, EKS, IAM, Managed Node Group e add-ons. O Service da API continua como `LoadBalancer`, sem a configuração final de NLB interno.
+A base Terraform possui redes hom/prd, subnets públicas de suporte, privadas de workloads e isoladas de banco, NAT zonal/Elastic IP, endpoint S3, EKS em subnets privadas, IAM e add-ons. Cada ambiente está configurado com um nó t3.medium On-Demand. O Service da API continua como `LoadBalancer`, sem a configuração final de NLB interno.
 
-**O bootstrap ECR/S3/OIDC está implementado; rede privada, API Gateway, VPC Link e isolamento dos workloads hom/prd ainda estão pendentes.** A base herdada não representa a implantação final da Fase 3.
+**Bootstrap e inicialização dos backends estão confirmados. A rede privada e a capacidade hom/prd foram implementadas e testadas com provider simulado; provisionamento e validação em nuvem permanecem pendentes.** API Gateway, VPC Link, controller/NLB e integração dos workloads ainda precisam ser implementados.
 
 ## Estrutura e tecnologias
 
@@ -76,18 +76,18 @@ Valores atuais em [variables.tf](terraform/variables.tf):
 | `aws_region` | us-east-1 |
 | Nome do cluster (calculado, não é variável) | mecanica-hom-eks ou mecanica-prd-eks |
 | `kubernetes_version` | null; versão não fixada |
-| `vpc_cidr` | 10.0.0.0/16 |
-| `public_subnet_cidrs` | 10.0.1.0/24 e 10.0.2.0/24 |
-| `node_instance_types` / `node_capacity_type` | t3.small / ON_DEMAND |
-| Nós mínimo / desejado / máximo | 1 / 2 / 3 |
+| `vpc_cidr` | Obrigatória, IPv4 /16; hom=10.0.0.0/16, prd=10.1.0.0/16 nos arquivos por ambiente |
+| Subnets (calculadas) | /24 derivadas da VPC: públicas 1/2, workloads 11/12, banco 21/22 |
+| `node_instance_types` / `node_capacity_type` | t3.medium / ON_DEMAND |
+| Nós mínimo / desejado / máximo | 1 / 1 / 1 |
 
-Esses valores são herdados. A arquitetura aceita prevê um nó por ambiente e redes próprias de hom/prd; isso ainda precisa ser aplicado ao Terraform. Os [outputs](terraform/outputs.tf) incluem IDs de rede, nomes/endpoint do EKS e ARNs de roles.
+Os arquivos por ambiente fixam rede e capacidade; a versão Kubernetes ainda precisa ser fixada antes do provisionamento. Os [outputs](terraform/outputs.tf) incluem subnets públicas/workloads/banco, tabelas de rotas, NAT/EIP/endpoint S3, nomes/endpoint do EKS e ARNs de roles. Subnets de banco são publicadas para o repositório do Aurora; nenhuma instância de banco é criada aqui.
 
 A identificação do ambiente é obrigatória em operações como plan/apply: informe `-var="environment=hom"` ou `-var="environment=prd"`, ou configure `environment` no arquivo local de variáveis usando [terraform.tfvars.example](terraform/terraform.tfvars.example) como referência. Use `-input=false` nas execuções automatizadas para falhar quando uma variável obrigatória estiver ausente. `terraform validate` verifica a configuração sem exigir os valores de execução.
 
 O [locals.tf](terraform/locals.tf) deriva o prefixo mecanica-<ambiente> e o cluster mecanica-<ambiente>-eks. Node group, roles IAM (incluindo EBS CSI) e tags Name da rede usam essa identificação. As tags padrão Project=mecanica, Environment=<ambiente> e ManagedBy=Terraform prevalecem sobre var.tags; demais tags adicionais são preservadas. O output cluster_name continua disponível, mas a variável de entrada cluster_name foi removida: retire-a de arquivos tfvars e argumentos antigos.
 
-O seletor descrito abaixo associa os parâmetros de cada ambiente ao respectivo backend S3. A separação de redes e a comprovação remota de coexistência continuam pendentes. Para recursos existentes, a alteração dos nomes pode provocar substituições; revisar o plan antes de qualquer apply. Consumidores devem usar o output cluster_name em vez de um nome fixo.
+O seletor descrito abaixo associa os parâmetros de cada ambiente ao respectivo backend S3. Redes e nomes são separados na configuração; a comprovação remota de coexistência continua pendente. Para recursos existentes, a alteração dos nomes pode provocar substituições; revisar o plan antes de qualquer apply. Consumidores devem usar o output cluster_name em vez de um nome fixo.
 
 Versionar somente os parâmetros públicos de terraform/environments/hom.tfvars e prd.tfvars. Credenciais, demais tfvars locais, planos e estados permanecem ignorados. Estados locais anteriores não foram migrados automaticamente: identificar sua relação com recursos existentes antes de um provisionamento.
 
@@ -122,7 +122,7 @@ TF_DATA_DIR fica em artifacts/terraform/<ambiente>/remote; a validação sem bac
 
 O seletor recusa pares de arquivos incompatíveis, TF_CLI_ARGS*, workspace diferente de default, estados locais anteriores e tfvars carregados automaticamente na raiz (estes dois últimos antes de Init/Plan). Se houver estado antigo, revisar os recursos administrados e executar uma migração explícita antes de continuar; não apagá-lo para contornar a proteção. Em 2026-09-28 não foram encontrados arquivos de estado local na unidade terraform; isso não comprova ausência de recursos ou estados remotos.
 
-Os arquivos públicos contêm inicialmente somente environment. Rede e capacidade ainda usam os defaults herdados até os próximos itens da E2.1. A configuração dos backends foi preparada, mas conexão S3, locking concorrente e planos reais da base ainda precisam ser validados. As roles do bootstrap ainda dependem das permissões dos workloads para o provisionamento completo.
+Os arquivos públicos informam environment, região, VPC /16 e capacidade de um nó. Init dos backends hom/prd e seus metadados foram confirmados pelo mantenedor; locking concorrente e planos reais da base ainda precisam ser validados. As roles do bootstrap ainda dependem das permissões dos workloads para o provisionamento completo.
 
 ```powershell
 # Testa a seleção com Terraform simulado, sem chamadas AWS.
@@ -131,16 +131,44 @@ pwsh -NoProfile -File scripts/tests/Test-TerraformEnvironment.ps1
 
 Referências: [backend S3](https://developer.hashicorp.com/terraform/language/backend/s3) e [TF_DATA_DIR](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_data_dir).
 
+## Rede e capacidade por ambiente
+
+| Camada | hom | prd | Roteamento |
+|---|---|---|---|
+| VPC | 10.0.0.0/16 | 10.1.0.0/16 | Sem conexão entre ambientes |
+| Públicas | 10.0.1.0/24, 10.0.2.0/24 | 10.1.1.0/24, 10.1.2.0/24 | Internet Gateway; suporte ao NAT |
+| Workloads | 10.0.11.0/24, 10.0.12.0/24 | 10.1.11.0/24, 10.1.12.0/24 | Saída pelo NAT e gateway endpoint S3 |
+| Banco | 10.0.21.0/24, 10.0.22.0/24 | 10.1.21.0/24, 10.1.22.0/24 | Somente rede local da VPC |
+
+Cada camada ocupa as mesmas duas primeiras AZs elegíveis, preservando a exclusão de use1-az3 exigida pelo EKS. CIDRs são derivados de vpc_cidr para evitar sobreposição interna. A entrada public_subnet_cidrs foi removida; retirar esse campo de tfvars antigos e usar os arquivos por ambiente.
+
+Subnets não atribuem IP público automaticamente. EKS e node group usam somente as subnets de workloads, que recebem a tag internal-elb para a futura descoberta do NLB interno. As subnets de suporte/banco não recebem tags para descoberta de load balancer público. O endpoint administrativo EKS é público e privado: nós usam o caminho privado; runners externos usam a API pública autenticada. A configuração de acesso das roles das pipelines ao Kubernetes continua pendente.
+
+Cada ambiente administra um NAT zonal na primeira subnet pública e seu Elastic IP no próprio estado. As rotas dos workloads dependem dele; a tabela do banco não contém rota padrão nem associação ao endpoint S3. NAT/EIP são destruídos com a base após seus dependentes, preservando o bootstrap; o descarte completo ainda precisa coordenar workloads, banco e NLB antes da base.
+
+O gateway endpoint S3 está associado somente à tabela dos workloads, para acesso a S3/camadas ECR sem NAT. APIs ECR, Secrets Manager e saída externa continuam pelo NAT. Security groups/conectividade do Aurora serão implementados com o banco; as subnets isoladas não substituem essas regras.
+
+Um nó t3.medium On-Demand por cluster (mínimo/desejado/máximo 1) é a capacidade normal. Duas AZs de subnets não tornam um nó ou um NAT altamente disponíveis; atualizações do managed node group podem gerar capacidade transitória. HPA e probes da API não foram alterados. Versão EKS e capacidade com add-ons/observabilidade ainda exigem validação antes da apresentação.
+
+Validação sem AWS, usando os próprios parâmetros versionados:
+
+```powershell
+terraform -chdir=terraform test -var-file=environments/hom.tfvars
+terraform -chdir=terraform test -var-file=environments/prd.tfvars
+```
+
+Referências: [rede EKS](https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html), [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html) e [gateway endpoint S3](https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html).
+
 ## CI e deploy
 
 O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/`main`, além de permitir acionamento manual. Não há filtro por caminhos, para que os checks obrigatórios também sejam emitidos em mudanças de documentação.
 
-- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação de terraform/ e bootstrap/; testes de plano do bootstrap com provider AWS simulado e testes offline do seletor de ambientes.
+- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação de terraform/ e bootstrap/; testes de plano do bootstrap, testes completos de rede/capacidade com provider AWS simulado para cada arquivo de ambiente e testes offline do seletor de ambientes.
 - `kubernetes-validate`: kubectl 1.36.1 renderiza a composição ativa de `kubernetes/`; não conecta ao cluster nem valida recursos instalados nele.
 
-Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Executam apenas planos simulados nos testes do bootstrap; não executam plan contra AWS, apply, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
+Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Os testes de rede executam plan/apply/teardown exclusivamente no provider AWS simulado para conferir os IDs e vínculos; nenhum recurso real é criado. Não executam plan/apply contra AWS, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
 
-O bootstrap está provisionado e a autenticação OIDC possui diagnóstico manual. Acesso administrativo ao EKS e permissões efetivas dos workloads ainda precisam de implementação/validação. Rede privada, controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
+O bootstrap está provisionado e a autenticação OIDC possui diagnóstico manual. Acesso administrativo ao EKS e permissões efetivas dos workloads ainda precisam de implementação/validação. Rede privada está configurada e validada por simulação; controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
 
 A sequência planejada é bootstrap persistente, plataforma/rede/EKS e Service, banco/esquema, API e função, seguida de Gateway e verificações. A inicialização do banco pertence ao repositório de banco. Consulte a [RFC de entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/rfcs/002-ENTREGA.md) para contratos e dependências.
 
@@ -164,7 +192,7 @@ Entradas de Environment: AWS_REGION, AWS_BASE_ROLE_ARN, AWS_GATEWAY_ROLE_ARN, TF
 
 ## Desenvolvimento e ambientes
 
-Todo trabalho parte da `develop` atualizada, em branch de tarefa e PR para `develop`. Promover `develop -> main` somente com a entrega concluída. A arquitetura prevê **hom** para develop e **prd** para main, coexistindo com recursos e estados separados; a seleção de parâmetros e estados está preparada; rede privada, capacidade final e isolamento completo ainda dependem das próximas etapas e validação remota.
+Todo trabalho parte da `develop` atualizada, em branch de tarefa e PR para `develop`. Promover `develop -> main` somente com a entrega concluída. A arquitetura prevê **hom** para develop e **prd** para main, coexistindo com recursos e estados separados; seleção de estados, redes privadas e capacidade estão configuradas. Coexistência, conectividade e descarte independente ainda precisam ser comprovados em nuvem.
 
 ## APIs e referências
 

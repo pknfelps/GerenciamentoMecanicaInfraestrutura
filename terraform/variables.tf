@@ -23,26 +23,22 @@ variable "kubernetes_version" {
 }
 
 variable "vpc_cidr" {
-  description = "Bloco CIDR IPv4 reservado para a VPC."
+  description = "Rede IPv4 /16 do ambiente; seis subnets /24 são derivadas sem sobreposição."
   type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "public_subnet_cidrs" {
-  description = "Blocos CIDR das duas subnets públicas do cluster."
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+  nullable    = false
 
   validation {
-    condition     = length(var.public_subnet_cidrs) == 2
-    error_message = "Informe exatamente dois blocos CIDR para as subnets públicas."
+    condition = can(cidrnetmask(var.vpc_cidr)) && try(
+      split("/", var.vpc_cidr)[1] == "16" && cidrhost(var.vpc_cidr, 0) == split("/", var.vpc_cidr)[0], false
+    )
+    error_message = "Informe uma rede IPv4 /16 canônica, como 10.0.0.0/16."
   }
 }
 
 variable "node_instance_types" {
   description = "Tipos de instância EC2 permitidos no Managed Node Group."
   type        = list(string)
-  default     = ["t3.small"]
+  default     = ["t3.medium"]
 }
 
 variable "node_capacity_type" {
@@ -70,7 +66,7 @@ variable "node_min_size" {
 variable "node_desired_size" {
   description = "Quantidade desejada de nós do Managed Node Group."
   type        = number
-  default     = 2
+  default     = 1
 
   validation {
     condition     = var.node_desired_size >= 1
@@ -81,7 +77,7 @@ variable "node_desired_size" {
 variable "node_max_size" {
   description = "Quantidade máxima de nós do Managed Node Group."
   type        = number
-  default     = 3
+  default     = 1
 
   validation {
     condition     = var.node_max_size >= 1
@@ -94,4 +90,3 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
