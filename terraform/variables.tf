@@ -16,10 +16,14 @@ variable "aws_region" {
 }
 
 variable "kubernetes_version" {
-  description = "Versão do Kubernetes usada pelo EKS. Quando nula, a AWS seleciona a versão padrão disponível."
+  description = "Versão minor explícita do Kubernetes para o cluster EKS e seu Managed Node Group."
   type        = string
-  default     = null
-  nullable    = true
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^1[.][0-9]+$", var.kubernetes_version))
+    error_message = "Informe a versão minor do Kubernetes no formato 1.N, como 1.36."
+  }
 }
 
 variable "vpc_cidr" {

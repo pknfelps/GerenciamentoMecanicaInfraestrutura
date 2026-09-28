@@ -1,6 +1,7 @@
 # Somente parâmetros públicos; secrets nunca pertencem a este arquivo.
 environment         = "prd"
 aws_region          = "us-east-1"
+kubernetes_version  = "1.36"
 vpc_cidr            = "10.1.0.0/16"
 node_instance_types = ["t3.medium"]
 node_capacity_type  = "ON_DEMAND"

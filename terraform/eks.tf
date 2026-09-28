@@ -16,6 +16,7 @@ resource "aws_eks_cluster" "main" {
 
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
+  version         = aws_eks_cluster.main.version
   node_group_name = "${local.cluster_name}-nodes"
   node_role_arn   = aws_iam_role.eks_nodes.arn
   subnet_ids      = aws_subnet.workload[*].id

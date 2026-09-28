@@ -75,13 +75,13 @@ Valores atuais em [variables.tf](terraform/variables.tf):
 | `environment` | Obrigatória, sem padrão; aceita somente hom ou prd |
 | `aws_region` | us-east-1 |
 | Nome do cluster (calculado, não é variável) | mecanica-hom-eks ou mecanica-prd-eks |
-| `kubernetes_version` | null; versão não fixada |
+| `kubernetes_version` | Obrigatória, sem padrão; 1.36 nos arquivos hom/prd |
 | `vpc_cidr` | Obrigatória, IPv4 /16; hom=10.0.0.0/16, prd=10.1.0.0/16 nos arquivos por ambiente |
 | Subnets (calculadas) | /24 derivadas da VPC: públicas 1/2, workloads 11/12, banco 21/22 |
 | `node_instance_types` / `node_capacity_type` | t3.medium / ON_DEMAND |
 | Nós mínimo / desejado / máximo | 1 / 1 / 1 |
 
-Os arquivos por ambiente fixam rede e capacidade; a versão Kubernetes ainda precisa ser fixada antes do provisionamento. Os [outputs](terraform/outputs.tf) incluem subnets públicas/workloads/banco, tabelas de rotas, NAT/EIP/endpoint S3, nomes/endpoint do EKS e ARNs de roles. Subnets de banco são publicadas para o repositório do Aurora; nenhuma instância de banco é criada aqui.
+Os arquivos por ambiente fixam rede, capacidade e Kubernetes 1.36. Os [outputs](terraform/outputs.tf) incluem subnets públicas/workloads/banco, tabelas de rotas, NAT/EIP/endpoint S3, nomes/endpoint do EKS e ARNs de roles. Subnets de banco são publicadas para o repositório do Aurora; nenhuma instância de banco é criada aqui.
 
 A identificação do ambiente é obrigatória em operações como plan/apply: informe `-var="environment=hom"` ou `-var="environment=prd"`, ou configure `environment` no arquivo local de variáveis usando [terraform.tfvars.example](terraform/terraform.tfvars.example) como referência. Use `-input=false` nas execuções automatizadas para falhar quando uma variável obrigatória estiver ausente. `terraform validate` verifica a configuração sem exigir os valores de execução.
 
@@ -122,7 +122,7 @@ TF_DATA_DIR fica em artifacts/terraform/<ambiente>/remote; a validação sem bac
 
 O seletor recusa pares de arquivos incompatíveis, TF_CLI_ARGS*, workspace diferente de default, estados locais anteriores e tfvars carregados automaticamente na raiz (estes dois últimos antes de Init/Plan). Se houver estado antigo, revisar os recursos administrados e executar uma migração explícita antes de continuar; não apagá-lo para contornar a proteção. Em 2026-09-28 não foram encontrados arquivos de estado local na unidade terraform; isso não comprova ausência de recursos ou estados remotos.
 
-Os arquivos públicos informam environment, região, VPC /16 e capacidade de um nó. Init dos backends hom/prd e seus metadados foram confirmados pelo mantenedor; locking concorrente e planos reais da base ainda precisam ser validados. As roles do bootstrap ainda dependem das permissões dos workloads para o provisionamento completo.
+Os arquivos públicos informam environment, região, versão Kubernetes, VPC /16 e capacidade de um nó. Init dos backends hom/prd e seus metadados foram confirmados pelo mantenedor; locking concorrente e planos reais da base ainda precisam ser validados. As roles do bootstrap ainda dependem das permissões dos workloads para o provisionamento completo.
 
 ```powershell
 # Testa a seleção com Terraform simulado, sem chamadas AWS.
@@ -148,7 +148,7 @@ Cada ambiente administra um NAT zonal na primeira subnet pública e seu Elastic 
 
 O gateway endpoint S3 está associado somente à tabela dos workloads, para acesso a S3/camadas ECR sem NAT. APIs ECR, Secrets Manager e saída externa continuam pelo NAT. Security groups/conectividade do Aurora serão implementados com o banco; as subnets isoladas não substituem essas regras.
 
-Um nó t3.medium On-Demand por cluster (mínimo/desejado/máximo 1) é a capacidade normal. Duas AZs de subnets não tornam um nó ou um NAT altamente disponíveis; atualizações do managed node group podem gerar capacidade transitória. HPA e probes da API não foram alterados. Versão EKS e capacidade com add-ons/observabilidade ainda exigem validação antes da apresentação.
+Um nó t3.medium On-Demand por cluster (mínimo/desejado/máximo 1) é a capacidade normal. Duas AZs de subnets não tornam um nó ou um NAT altamente disponíveis; atualizações do managed node group podem gerar capacidade transitória. HPA e probes da API não foram alterados. Funcionamento dos add-ons e capacidade com observabilidade ainda exigem validação no cluster antes da apresentação.
 
 Validação sem AWS, usando os próprios parâmetros versionados:
 
@@ -158,6 +158,16 @@ terraform -chdir=terraform test -var-file=environments/prd.tfvars
 ```
 
 Referências: [rede EKS](https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html), [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html) e [gateway endpoint S3](https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html).
+
+## Versão do Kubernetes
+
+Os arquivos hom/prd e o exemplo fixam Kubernetes **1.36**. A variável é obrigatória e aceita uma versão minor (1.N); o Managed Node Group referencia a versão do cluster. O EKS gerencia patches e versões de plataforma, portanto esta configuração não fixa um patch como 1.36.4.
+
+Em 2026-09-28, consultas somente de leitura à API EKS em us-east-1 confirmaram 1.36 em STANDARD_SUPPORT, com término do suporte padrão em **2027-08-02 (UTC)**. Também confirmaram versões compatíveis de Pod Identity Agent, EBS CSI e Metrics Server. Os add-ons continuam com seleção padrão do EKS; esta consulta verifica disponibilidade, não funcionamento no cluster. O kubectl 1.36.1 do CI permanece alinhado à mesma versão minor.
+
+Revisar a versão antes de novas janelas de implantação e antes do fim do suporte padrão. A fixação não impede as políticas de ciclo de vida do EKS; esta alteração não modifica a política de suporte do serviço. Para atualizações futuras, validar primeiro em hom, verificar compatibilidade dos add-ons e revisar o plan antes de promover a prd.
+
+Referência: [versões e calendário de suporte do Amazon EKS](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html).
 
 ## CI e deploy
 

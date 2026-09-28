@@ -25,6 +25,15 @@ run "private_network_and_single_node" {
 
   assert {
     condition = (
+      var.kubernetes_version == "1.36" &&
+      aws_eks_cluster.main.version == var.kubernetes_version &&
+      aws_eks_node_group.main.version == aws_eks_cluster.main.version
+    )
+    error_message = "hom e prd devem fixar Kubernetes 1.36 e manter o node group na mesma versão do cluster."
+  }
+
+  assert {
+    condition = (
       aws_vpc.main.cidr_block == (var.environment == "hom" ? "10.0.0.0/16" : "10.1.0.0/16") &&
       aws_eks_cluster.main.name == "mecanica-${var.environment}-eks"
     )
