@@ -38,6 +38,10 @@ jobs:
       - name: Test bootstrap plans without AWS access
         run: terraform -chdir=bootstrap test -no-color
 
+      - name: Test environment selection without AWS access
+        shell: pwsh
+        run: ./scripts/tests/Test-TerraformEnvironment.ps1
+
   kubernetes-validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

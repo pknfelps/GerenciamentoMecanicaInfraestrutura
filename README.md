@@ -87,15 +87,55 @@ A identificação do ambiente é obrigatória em operações como plan/apply: in
 
 O [locals.tf](terraform/locals.tf) deriva o prefixo mecanica-<ambiente> e o cluster mecanica-<ambiente>-eks. Node group, roles IAM (incluindo EBS CSI) e tags Name da rede usam essa identificação. As tags padrão Project=mecanica, Environment=<ambiente> e ManagedBy=Terraform prevalecem sobre var.tags; demais tags adicionais são preservadas. O output cluster_name continua disponível, mas a variável de entrada cluster_name foi removida: retire-a de arquivos tfvars e argumentos antigos.
 
-Essa identificação ainda não seleciona o backend. A separação de estados e redes continua pendente; não implantar os dois ambientes sobre o mesmo estado. Para recursos existentes, a alteração dos nomes pode provocar substituições; revisar o plan antes de qualquer apply. Consumidores devem usar o output cluster_name em vez de um nome fixo.
+O seletor descrito abaixo associa os parâmetros de cada ambiente ao respectivo backend S3. A separação de redes e a comprovação remota de coexistência continuam pendentes. Para recursos existentes, a alteração dos nomes pode provocar substituições; revisar o plan antes de qualquer apply. Consumidores devem usar o output cluster_name em vez de um nome fixo.
 
-Não versionar credenciais, tfvars preenchidos, planos ou estados. Estados locais anteriores não foram migrados automaticamente: identificar sua relação com recursos existentes antes de um provisionamento.
+Versionar somente os parâmetros públicos de terraform/environments/hom.tfvars e prd.tfvars. Credenciais, demais tfvars locais, planos e estados permanecem ignorados. Estados locais anteriores não foram migrados automaticamente: identificar sua relação com recursos existentes antes de um provisionamento.
+
+## Seleção de ambiente e estado da base
+
+Use PowerShell 7 e Terraform no PATH. O [seletor](scripts/Invoke-TerraformEnvironment.ps1) associa automaticamente o arquivo de parâmetros ao backend; os caminhos são resolvidos a partir do script, independentemente do diretório atual.
+
+| Ambiente | Parâmetros públicos | Backend | Estado no bucket compartilhado |
+|---|---|---|---|
+| hom | terraform/environments/hom.tfvars | terraform/backends/hom.hcl | hom/base/terraform.tfstate |
+| prd | terraform/environments/prd.tfvars | terraform/backends/prd.hcl | prd/base/terraform.tfstate |
+
+O bucket existente é mecanica-tfstate-121754142617-us-east-1. Ambos os backends exigem a conta 121754142617, região us-east-1, encrypt=true e use_lockfile=true. O workspace é sempre default; a separação ocorre pelas chaves. O bootstrap continua em shared/bootstrap/terraform.tfstate e não é gerenciado por este script.
+
+```powershell
+# Apenas mostra a seleção; não executa Terraform nem conecta à AWS.
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment hom
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment prd
+
+# Validação local: init sem backend e validate; pode baixar providers.
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment hom -Action Validate
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment prd -Action Validate
+
+# Quando for autorizada a conexão remota, com AWS CLI/SDK autenticado:
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment hom -Action Init
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment hom -Action Plan
+```
+
+Plan inicializa o backend selecionado antes de planejar; basta trocar hom por prd para usar o outro ambiente. Esta versão do script oferece Show, Validate, Init e Plan; apply/destroy e salvamento/aplicação de planos serão integrados ao fluxo de provisionamento. Nenhuma ação faz apply, destroy, migração automática ou reconfigure.
+
+TF_DATA_DIR fica em artifacts/terraform/<ambiente>/remote; a validação sem backend usa artifacts/terraform/<ambiente>/validation. Assim, validação e operações remotas não reutilizam metadados de backend. O script restaura TF_DATA_DIR, TF_WORKSPACE e TF_INPUT ao terminar, inclusive em falhas. Comandos Terraform manuais posteriores não herdam essa seleção.
+
+O seletor recusa pares de arquivos incompatíveis, TF_CLI_ARGS*, workspace diferente de default, estados locais anteriores e tfvars carregados automaticamente na raiz (estes dois últimos antes de Init/Plan). Se houver estado antigo, revisar os recursos administrados e executar uma migração explícita antes de continuar; não apagá-lo para contornar a proteção. Em 2026-09-28 não foram encontrados arquivos de estado local na unidade terraform; isso não comprova ausência de recursos ou estados remotos.
+
+Os arquivos públicos contêm inicialmente somente environment. Rede e capacidade ainda usam os defaults herdados até os próximos itens da E2.1. A configuração dos backends foi preparada, mas conexão S3, locking concorrente e planos reais da base ainda precisam ser validados. As roles do bootstrap ainda dependem das permissões dos workloads para o provisionamento completo.
+
+```powershell
+# Testa a seleção com Terraform simulado, sem chamadas AWS.
+pwsh -NoProfile -File scripts/tests/Test-TerraformEnvironment.ps1
+```
+
+Referências: [backend S3](https://developer.hashicorp.com/terraform/language/backend/s3) e [TF_DATA_DIR](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_data_dir).
 
 ## CI e deploy
 
 O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/`main`, além de permitir acionamento manual. Não há filtro por caminhos, para que os checks obrigatórios também sejam emitidos em mudanças de documentação.
 
-- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação de terraform/ e bootstrap/; testes de plano do bootstrap com provider AWS simulado.
+- `terraform-validate`: Terraform 1.15.9, formatação, init com backend desabilitado/lockfile somente leitura e validação de terraform/ e bootstrap/; testes de plano do bootstrap com provider AWS simulado e testes offline do seletor de ambientes.
 - `kubernetes-validate`: kubectl 1.36.1 renderiza a composição ativa de `kubernetes/`; não conecta ao cluster nem valida recursos instalados nele.
 
 Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Executam apenas planos simulados nos testes do bootstrap; não executam plan contra AWS, apply, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
@@ -124,7 +164,7 @@ Entradas de Environment: AWS_REGION, AWS_BASE_ROLE_ARN, AWS_GATEWAY_ROLE_ARN, TF
 
 ## Desenvolvimento e ambientes
 
-Todo trabalho parte da `develop` atualizada, em branch de tarefa e PR para `develop`. Promover `develop -> main` somente com a entrega concluída. A arquitetura prevê **hom** para develop e **prd** para main, coexistindo com recursos e estados separados; a configuração atual ainda não oferece esse isolamento.
+Todo trabalho parte da `develop` atualizada, em branch de tarefa e PR para `develop`. Promover `develop -> main` somente com a entrega concluída. A arquitetura prevê **hom** para develop e **prd** para main, coexistindo com recursos e estados separados; a seleção de parâmetros e estados está preparada; rede privada, capacidade final e isolamento completo ainda dependem das próximas etapas e validação remota.
 
 ## APIs e referências
 
