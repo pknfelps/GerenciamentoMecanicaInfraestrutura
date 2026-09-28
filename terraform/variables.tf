@@ -15,12 +15,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "cluster_name" {
-  description = "Nome do cluster EKS. Deve permanecer alinhado com a pipeline de deploy."
-  type        = string
-  default     = "api-cluster"
-}
-
 variable "kubernetes_version" {
   description = "Versão do Kubernetes usada pelo EKS. Quando nula, a AWS seleciona a versão padrão disponível."
   type        = string
@@ -96,7 +90,7 @@ variable "node_max_size" {
 }
 
 variable "tags" {
-  description = "Tags adicionais aplicadas aos recursos AWS."
+  description = "Tags adicionais aplicadas aos recursos AWS. Project, Environment e ManagedBy são definidos pela infraestrutura e têm precedência."
   type        = map(string)
   default     = {}
 }

@@ -4,8 +4,8 @@ output "aws_region" {
 }
 
 output "cluster_name" {
-  description = "Nome definido para o cluster EKS."
-  value       = var.cluster_name
+  description = "Nome do cluster EKS derivado do ambiente."
+  value       = local.cluster_name
 }
 
 output "vpc_id" {

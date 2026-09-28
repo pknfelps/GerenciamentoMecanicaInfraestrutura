@@ -74,7 +74,7 @@ Valores atuais em [variables.tf](terraform/variables.tf):
 |---|---|
 | `environment` | Obrigatória, sem padrão; aceita somente hom ou prd |
 | `aws_region` | us-east-1 |
-| `cluster_name` | api-cluster |
+| Nome do cluster (calculado, não é variável) | mecanica-hom-eks ou mecanica-prd-eks |
 | `kubernetes_version` | null; versão não fixada |
 | `vpc_cidr` | 10.0.0.0/16 |
 | `public_subnet_cidrs` | 10.0.1.0/24 e 10.0.2.0/24 |
@@ -85,7 +85,9 @@ Esses valores são herdados. A arquitetura aceita prevê um nó por ambiente e r
 
 A identificação do ambiente é obrigatória em operações como plan/apply: informe `-var="environment=hom"` ou `-var="environment=prd"`, ou configure `environment` no arquivo local de variáveis usando [terraform.tfvars.example](terraform/terraform.tfvars.example) como referência. Use `-input=false` nas execuções automatizadas para falhar quando uma variável obrigatória estiver ausente. `terraform validate` verifica a configuração sem exigir os valores de execução.
 
-Nesta etapa, `environment` valida a identificação informada; ainda não seleciona o backend nem altera nomes/tags dos recursos. A separação efetiva de estados, nomes e redes será implementada nos próximos passos. Não usar somente essa variável para implantar os dois ambientes sobre o mesmo estado.
+O [locals.tf](terraform/locals.tf) deriva o prefixo mecanica-<ambiente> e o cluster mecanica-<ambiente>-eks. Node group, roles IAM (incluindo EBS CSI) e tags Name da rede usam essa identificação. As tags padrão Project=mecanica, Environment=<ambiente> e ManagedBy=Terraform prevalecem sobre var.tags; demais tags adicionais são preservadas. O output cluster_name continua disponível, mas a variável de entrada cluster_name foi removida: retire-a de arquivos tfvars e argumentos antigos.
+
+Essa identificação ainda não seleciona o backend. A separação de estados e redes continua pendente; não implantar os dois ambientes sobre o mesmo estado. Para recursos existentes, a alteração dos nomes pode provocar substituições; revisar o plan antes de qualquer apply. Consumidores devem usar o output cluster_name em vez de um nome fixo.
 
 Não versionar credenciais, tfvars preenchidos, planos ou estados. Estados locais anteriores não foram migrados automaticamente: identificar sua relação com recursos existentes antes de um provisionamento.
 
