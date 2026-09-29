@@ -42,7 +42,7 @@ variable "vpc_cidr" {
 variable "node_instance_types" {
   description = "Tipos de instância EC2 permitidos no Managed Node Group."
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.small"]
 }
 
 variable "node_capacity_type" {

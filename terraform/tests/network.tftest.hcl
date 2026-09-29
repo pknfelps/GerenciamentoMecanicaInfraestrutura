@@ -89,7 +89,7 @@ run "private_network_and_single_node" {
   }
   assert {
     condition = (
-      toset(aws_eks_node_group.main.instance_types) == toset(["t3.medium"]) &&
+      toset(aws_eks_node_group.main.instance_types) == toset(["t3.small"]) &&
       aws_eks_node_group.main.capacity_type == "ON_DEMAND" &&
       aws_eks_node_group.main.scaling_config[0].min_size == 1 &&
       aws_eks_node_group.main.scaling_config[0].desired_size == 1 &&
@@ -97,6 +97,6 @@ run "private_network_and_single_node" {
       output.workload_subnet_ids == aws_subnet.workload[*].id &&
       output.database_subnet_ids == aws_subnet.database[*].id
     )
-    error_message = "Capacidade deve ser um t3.medium On-Demand; outputs devem identificar as subnets corretas."
+    error_message = "Capacidade deve ser um t3.small On-Demand; outputs devem identificar as subnets corretas."
   }
 }

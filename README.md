@@ -4,7 +4,7 @@ Mantém a infraestrutura AWS e a plataforma Kubernetes compartilhada pelos compo
 
 ## Estado da implementação
 
-A base Terraform possui redes hom/prd, subnets públicas de suporte, privadas de workloads e isoladas de banco, NAT zonal/Elastic IP, endpoint S3, EKS em subnets privadas, IAM e add-ons. Cada ambiente está configurado com um nó t3.medium On-Demand. O Service da API continua como `LoadBalancer`, sem a configuração final de NLB interno.
+A base Terraform possui redes hom/prd, subnets públicas de suporte, privadas de workloads e isoladas de banco, NAT zonal/Elastic IP, endpoint S3, EKS em subnets privadas, IAM e add-ons. Cada ambiente está configurado com um nó t3.small On-Demand. O Service da API continua como `LoadBalancer`, sem a configuração final de NLB interno.
 
 **Bootstrap e inicialização dos backends estão confirmados. A rede privada e a capacidade hom/prd foram implementadas e testadas com provider simulado; provisionamento e validação em nuvem permanecem pendentes.** API Gateway, VPC Link, controller/NLB e integração dos workloads ainda precisam ser implementados.
 
@@ -78,7 +78,7 @@ Valores atuais em [variables.tf](terraform/variables.tf):
 | `kubernetes_version` | Obrigatória, sem padrão; 1.36 nos arquivos hom/prd |
 | `vpc_cidr` | Obrigatória, IPv4 /16; hom=10.0.0.0/16, prd=10.1.0.0/16 nos arquivos por ambiente |
 | Subnets (calculadas) | /24 derivadas da VPC: públicas 1/2, workloads 11/12, banco 21/22 |
-| `node_instance_types` / `node_capacity_type` | t3.medium / ON_DEMAND |
+| `node_instance_types` / `node_capacity_type` | t3.small / ON_DEMAND |
 | Nós mínimo / desejado / máximo | 1 / 1 / 1 |
 
 Os arquivos por ambiente fixam rede, capacidade e Kubernetes 1.36. Os [outputs](terraform/outputs.tf) incluem subnets públicas/workloads/banco, tabelas de rotas, NAT/EIP/endpoint S3, nomes/endpoint do EKS e ARNs de roles. Subnets de banco são publicadas para o repositório do Aurora; nenhuma instância de banco é criada aqui.
@@ -148,7 +148,7 @@ Cada ambiente administra um NAT zonal na primeira subnet pública e seu Elastic 
 
 O gateway endpoint S3 está associado somente à tabela dos workloads, para acesso a S3/camadas ECR sem NAT. APIs ECR, Secrets Manager e saída externa continuam pelo NAT. Security groups/conectividade do Aurora serão implementados com o banco; as subnets isoladas não substituem essas regras.
 
-Um nó t3.medium On-Demand por cluster (mínimo/desejado/máximo 1) é a capacidade normal. Duas AZs de subnets não tornam um nó ou um NAT altamente disponíveis; atualizações do managed node group podem gerar capacidade transitória. HPA e probes da API não foram alterados. Funcionamento dos add-ons e capacidade com observabilidade ainda exigem validação no cluster antes da apresentação.
+Um nó t3.small On-Demand por cluster (mínimo/desejado/máximo 1) é a capacidade normal. Esse tipo tem 2 vCPUs e 2 GiB de memória; foi escolhido após a EC2 recusar t3.medium por elegibilidade ao Free Tier. Confirmar a saúde dos add-ons e a capacidade disponível para API/observabilidade após o provisionamento. Duas AZs de subnets não tornam um nó ou um NAT altamente disponíveis; atualizações do managed node group podem gerar capacidade transitória. HPA e probes da API não foram alterados. Funcionamento dos add-ons e capacidade com observabilidade ainda exigem validação no cluster antes da apresentação.
 
 Validação sem AWS, usando os próprios parâmetros versionados:
 
