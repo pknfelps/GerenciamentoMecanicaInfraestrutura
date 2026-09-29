@@ -2,6 +2,12 @@
 mock_provider "aws" {
 
 
+  mock_data "aws_iam_user" {
+    defaults = {
+      arn = "arn:aws:iam::121754142617:user/mecanica"
+    }
+  }
+
   mock_data "aws_availability_zones" {
     defaults = {
       names = ["us-east-1a", "us-east-1b"]
@@ -22,6 +28,22 @@ mock_provider "aws" {
 run "private_network_and_single_node" {
   # Apply apenas no provider simulado: resolve IDs para conferir rotas e vínculos.
   command = apply
+
+  assert {
+    condition = (
+      aws_eks_cluster.main.access_config[0].authentication_mode == "API_AND_CONFIG_MAP" &&
+      aws_eks_cluster.main.access_config[0].bootstrap_cluster_creator_admin_permissions &&
+      data.aws_iam_user.operator.user_name == "mecanica" &&
+      aws_eks_access_entry.operator.type == "STANDARD" &&
+      aws_eks_access_entry.operator.principal_arn == "arn:aws:iam::121754142617:user/mecanica" &&
+      aws_eks_access_entry.operator.cluster_name == aws_eks_cluster.main.name &&
+      aws_eks_access_policy_association.operator_admin.cluster_name == aws_eks_access_entry.operator.cluster_name &&
+      aws_eks_access_policy_association.operator_admin.principal_arn == aws_eks_access_entry.operator.principal_arn &&
+      aws_eks_access_policy_association.operator_admin.policy_arn == "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy" &&
+      aws_eks_access_policy_association.operator_admin.access_scope[0].type == "cluster"
+    )
+    error_message = "O usuário existente mecanica deve receber administração Kubernetes no cluster do ambiente, preservando CONFIG_MAP."
+  }
 
   assert {
     condition = (

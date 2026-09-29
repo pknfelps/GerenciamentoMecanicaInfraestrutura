@@ -169,6 +169,28 @@ Revisar a versão antes de novas janelas de implantação e antes do fim do supo
 
 Referência: [versões e calendário de suporte do Amazon EKS](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html).
 
+## Acesso administrativo do operador
+
+[eks-access.tf](terraform/eks-access.tf) consulta o usuário IAM existente mecanica e registra uma access entry STANDARD no cluster de cada ambiente, associada à AmazonEKSClusterAdminPolicy com escopo cluster. Esse operador administra os recursos Kubernetes de todo o cluster. O Terraform não cria o usuário nem gerencia suas credenciais/policies IAM.
+
+O cluster usa API_AND_CONFIG_MAP: habilita access entries e mantém o mecanismo aws-auth existente. A migração ocorre em lugar, sem recriar o EKS. Depois de habilitar a API, não é possível retornar ao modo exclusivamente CONFIG_MAP. Acesso das roles das pipelines será implementado separadamente.
+
+Após aplicar o plano, configure um perfil AWS autenticado como mecanica e confirme sua identidade antes de usar kubectl:
+
+~~~powershell
+# Executar com um perfil mecanica já autenticado.
+aws sts get-caller-identity --profile mecanica
+# O ARN deve ser arn:aws:iam::121754142617:user/mecanica.
+aws eks update-kubeconfig --name mecanica-hom-eks --region us-east-1 --profile mecanica --alias mecanica-hom
+kubectl --context mecanica-hom auth can-i get nodes
+kubectl --context mecanica-hom get nodes
+kubectl --context mecanica-hom get pods -A
+~~~
+
+Trocar o nome do perfil não autentica o usuário automaticamente. Para prd, usar mecanica-prd-eks/contexto mecanica-prd após seu provisionamento. Não validar esse acesso usando uma sessão root ou impersonação kubectl --as; o teste precisa usar a identidade do operador.
+
+Referências: [modo de autenticação EKS](https://docs.aws.amazon.com/eks/latest/userguide/setting-up-access-entries.html) e [AmazonEKSClusterAdminPolicy](https://docs.aws.amazon.com/eks/latest/userguide/access-policy-permissions.html#access-policy-permissions-amazoneksclusteradminpolicy).
+
 ## CI e deploy
 
 O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/`main`, além de permitir acionamento manual. Não há filtro por caminhos, para que os checks obrigatórios também sejam emitidos em mudanças de documentação.
@@ -178,7 +200,7 @@ O [workflow de CI](.github/workflows/ci.yml) valida PRs e pushes para `develop`/
 
 Os jobs usam apenas leitura do repositório e não precisam de credenciais AWS. Os testes de rede executam plan/apply/teardown exclusivamente no provider AWS simulado para conferir os IDs e vínculos; nenhum recurso real é criado. Não executam plan/apply contra AWS, deploy ou provisionamento. Após publicar o workflow e confirmar a primeira execução, configurar esses nomes como checks obrigatórios no ruleset. A configuração de proteção não é feita por este workflow.
 
-O bootstrap está provisionado e a autenticação OIDC possui diagnóstico manual. Acesso administrativo ao EKS e permissões efetivas dos workloads ainda precisam de implementação/validação. Rede privada está configurada e validada por simulação; controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
+O bootstrap está provisionado e a autenticação OIDC possui diagnóstico manual. Acesso administrativo de mecanica está declarado no Terraform; aplicação e validação com essa identidade permanecem pendentes. Acesso das pipelines e permissões efetivas dos workloads ainda precisam de implementação/validação. Rede privada está configurada e validada por simulação; controller/NLB, observabilidade e unidade Gateway serão implementados antes da entrega final.
 
 A sequência planejada é bootstrap persistente, plataforma/rede/EKS e Service, banco/esquema, API e função, seguida de Gateway e verificações. A inicialização do banco pertence ao repositório de banco. Consulte a [RFC de entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/rfcs/002-ENTREGA.md) para contratos e dependências.
 
