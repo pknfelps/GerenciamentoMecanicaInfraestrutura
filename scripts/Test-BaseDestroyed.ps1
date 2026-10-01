@@ -17,11 +17,11 @@ if ((Get-Content -LiteralPath $clusterLog -Raw) -notmatch '\(ResourceNotFoundExc
 }
 $filters = @('Name=tag:Project,Values=mecanica', "Name=tag:Environment,Values=$Environment", 'Name=tag:ManagedBy,Values=Terraform')
 foreach ($query in @(
-    @{Operation='describe-vpcs';Query='Vpcs[].VpcId'},
-    @{Operation='describe-nat-gateways';Query="NatGateways[?State!='deleted'].NatGatewayId"},
-    @{Operation='describe-addresses';Query='Addresses[].AllocationId'}
+    @{Operation='describe-vpcs';FilterParameter='--filters';Query='Vpcs[].VpcId'},
+    @{Operation='describe-nat-gateways';FilterParameter='--filter';Query="NatGateways[?State!='deleted'].NatGatewayId"},
+    @{Operation='describe-addresses';FilterParameter='--filters';Query='Addresses[].AllocationId'}
 )) {
-    $result = & aws ec2 $query.Operation --region us-east-1 --filters @filters --query $query.Query --output json
+    $result = & aws ec2 $query.Operation --region us-east-1 $query.FilterParameter @filters --query $query.Query --output json
     if ($LASTEXITCODE -ne 0) { throw "Falha ao conferir $($query.Operation) após descarte." }
     $resources = @($result | ConvertFrom-Json)
     if ($resources.Count -gt 0) { throw "Ainda há recursos do ambiente em $($query.Operation); descarte incompleto." }

@@ -22,6 +22,17 @@ function aws {
             default { '{"cluster":{}}' }
         }
     } else {
+        # Contrato da AWS CLI: NAT usa --filter; VPC e EIP usam --filters.
+        $expectedFilter = switch ($args[1]) {
+            'describe-nat-gateways' { '--filter' }
+            'describe-vpcs' { '--filters' }
+            'describe-addresses' { '--filters' }
+            default { throw "Operação EC2 inesperada: $($args[1])" }
+        }
+        $filterOptions = @($args | Where-Object { $_ -in @('--filter', '--filters') })
+        if ($filterOptions.Count -ne 1 -or $filterOptions[0] -ne $expectedFilter) {
+            throw "Parâmetro de filtro inválido para $($args[1]); esperado $expectedFilter."
+        }
         foreach ($filter in @('Name=tag:Project,Values=mecanica','Name=tag:Environment,Values=hom','Name=tag:ManagedBy,Values=Terraform')) {
             if ($args -notcontains $filter) { throw 'Consulta não isolou tags do ambiente.' }
         }
