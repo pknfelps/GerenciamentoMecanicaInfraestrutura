@@ -129,6 +129,12 @@ Depois publicar a configuração em develop e iniciar **nova execução** base-d
 
 Aplicação desta correção concluída pelo assistente em 2026-10-01: somente duas base_network_manage atualizadas, 0 add/2 change/0 destroy, plano posterior No changes. Access Analyzer sem findings e 24 decisões custom/principal IAM aprovadas, incluindo bloqueio de EIPs/ENIs reais, IDs presentes/outra região e isolamento de ReleaseAddress. Evidências privadas em artifacts/terraform/bootstrap/eip-disassociation-recovery-36922551972. **Permissões já aplicadas para este incidente**: retomar agora com nova base-destroy develop/hom/destroy e nova revisão/aprovação. Publicar a correção Terraform/testes em develop para persistência; não precisa novo workflow em main para essa retomada. Nenhuma exclusão real ou alteração do estado da base executada pelo assistente; ausência final e novo ciclo completo ainda pendentes do runner.
 
+## Verificação após descarte: parâmetro da consulta NAT — 2026-10-01
+
+No commit 4dc6fbd0d3b5c5c93dedcdd95aff8d2c922613b1, o apply do EIP restante terminou e a verificação posterior falhou com Unknown options: --filters em describe-nat-gateways. A AWS CLI exige --filter nesse comando; describe-vpcs/describe-addresses usam --filters. Test-BaseDestroyed.ps1 agora seleciona o parâmetro por operação. O teste confere essa diferença, além das tags do ambiente, e reproduziu o erro antes da correção. Nove cenários de ausência e 15 de orquestração passaram; as três consultas também passaram no parser real da AWS CLI usando --generate-cli-skeleton input, sem acessar a AWS.
+
+Publicar a correção em develop e executar base-destroy develop/hom/action=plan. Se o estado continuar vazio, esse job executa a verificação de ausência sem apply ou aprovação. Se o plano identificar remanescentes, revisar e executar action=destroy com aprovação. Esta correção de script não exige aplicar o bootstrap nem publicar em main para testar hom. Registrar a mensagem final de ausência; os testes locais não comprovam o estado atual da AWS.
+
 ## Validação local
 
 ```powershell
