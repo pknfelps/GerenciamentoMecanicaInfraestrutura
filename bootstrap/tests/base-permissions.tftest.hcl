@@ -81,13 +81,21 @@ run "scoped_base_and_workload_permissions" {
   assert {
     condition = alltrue([
       for environment, policy in local.base_network_manage_policies :
-      alltrue([for statement in policy.Statement : statement.Sid == "TagOnCreation" ?
+      alltrue([for statement in policy.Statement : statement.Sid == "DisassociateMissingAddress" ?
+        statement.Action == ["ec2:DisassociateAddress"] &&
+        statement.Effect == "Allow" && !can(statement.Resource) &&
+        statement.NotResource == ["arn:aws:ec2:*:*:elastic-ip/*", "arn:aws:ec2:*:*:network-interface/*"] &&
+        statement.Condition.StringEquals == { "aws:RequestedRegion" = var.aws_region } &&
+        statement.Condition.Null == { "ec2:AllocationId" = "true", "ec2:NetworkInterfaceID" = "true" } :
+        statement.Sid == "TagOnCreation" ?
         statement.Condition.StringEquals["aws:RequestTag/Environment"] == environment :
         statement.Condition.StringEquals["ec2:ResourceTag/Environment"] == environment
       ]) &&
-      one([for statement in policy.Statement : statement if statement.Sid == "RemoveAdditionalTags"]).Condition.Null["aws:TagKeys"] == "false"
+      one([for statement in policy.Statement : statement if statement.Sid == "RemoveAdditionalTags"]).Condition.Null["aws:TagKeys"] == "false" &&
+      length([for statement in policy.Statement : statement if contains(statement.Action, "ec2:DisassociateAddress")]) == 1 &&
+      contains(one([for statement in policy.Statement : statement if statement.Sid == "ManageOwnNetwork"]).Action, "ec2:ReleaseAddress")
     ])
-    error_message = "Mutações EC2 devem exigir tags do ambiente e preservar tags de identidade."
+    error_message = "Mutações EC2 reais devem exigir tags do ambiente; somente DisassociateAddress sem recurso real aceita região e IDs ausentes, excluindo todos os EIPs/ENIs reais."
   }
   assert {
     condition = length(aws_iam_role_policy.workload_eks) == 4 && alltrue([
