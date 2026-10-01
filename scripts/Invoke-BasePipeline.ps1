@@ -3,6 +3,7 @@
 param(
     [Parameter(Mandatory)][ValidateSet('hom', 'prd')][string]$Environment,
     [ValidateSet('plan', 'apply', 'auto')][string]$Action = 'plan',
+    [ValidateSet('provision', 'destroy')][string]$Operation = 'provision',
     [string]$ExpectedCommit = '',
     [string]$ApprovedPlanSha256 = ''
 )
@@ -28,25 +29,30 @@ try {
     $env:TF_DATA_DIR = $selection.DataDirectory
     $env:TF_WORKSPACE = 'default'
     $env:TF_INPUT = 'false'
-    $dir = Join-Path $repoRoot "artifacts/terraform/$Environment/pipeline"
+    $mode = if ($Operation -eq 'destroy') { 'destroy-pipeline' } else { 'pipeline' }
+    $dir = Join-Path $repoRoot "artifacts/terraform/$Environment/$mode"
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     $plan = Join-Path $dir 'base.tfplan'
     $json = Join-Path $dir 'base.tfplan.json'
     $reportPath = Join-Path $dir 'review.json'
     # Plan/logs stay on the runner; no states, binary plans or values are uploaded.
     $planLog = Join-Path $dir 'plan.log'
-    & terraform "-chdir=$repoRoot/terraform" plan -input=false -no-color -detailed-exitcode -lock-timeout=60s "-var-file=$($selection.Variables)" "-out=$plan" *> $planLog
+    $planArguments = @('plan', '-input=false', '-no-color', '-detailed-exitcode', '-lock-timeout=60s', "-var-file=$($selection.Variables)", "-out=$plan")
+    if ($Operation -eq 'destroy') { $planArguments += '-destroy' }
+    & terraform "-chdir=$repoRoot/terraform" @planArguments *> $planLog
     if ($LASTEXITCODE -notin @(0, 2)) { Stop-TerraformFailure $planLog 'Plan' }
     & terraform "-chdir=$repoRoot/terraform" show -json $plan | Set-Content -LiteralPath $json -Encoding utf8
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao ler o plano salvo.' }
     $python = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
-    $reviewArgs = @("$PSScriptRoot/review_base_plan.py", $json, '--report', $reportPath)
+    $reviewer = if ($Operation -eq 'destroy') { 'review_base_destroy.py' } else { 'review_base_plan.py' }
+    $reviewArgs = @("$PSScriptRoot/$reviewer", $json, '--report', $reportPath)
+    if ($Operation -eq 'destroy') { $reviewArgs += @('--environment', $Environment) }
     if ($ApprovedPlanSha256) { $reviewArgs += @('--expected-sha256', $ApprovedPlanSha256) }
     & $python @reviewArgs
     if ($LASTEXITCODE -ne 0) { throw 'Plano recusado pela revisão; nenhum apply executado.' }
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
     $summary = @(
-        "### Base $Environment / $Action", '', "Commit: $($env:GITHUB_SHA)",
+        "### Base $Environment / $Operation / $Action", '', "Commit: $($env:GITHUB_SHA)",
         "Fingerprint SHA-256: $($report.sha256)", '', '| Recurso | Ação |', '|---|---|'
     )
     foreach ($change in $report.changes) { $summary += "| $($change.address) | $($change.actions -join '/') |" }
@@ -56,10 +62,18 @@ try {
         @(
             "commit=$($env:GITHUB_SHA)", "sha256=$($report.sha256)",
             "destructive=$($report.destructive.ToString().ToLowerInvariant())",
-            "creates_cluster=$($report.creates_cluster.ToString().ToLowerInvariant())"
+            "creates_cluster=$($report.creates_cluster.ToString().ToLowerInvariant())",
+            "has_changes=$($report.has_changes.ToString().ToLowerInvariant())"
         ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
     }
-    if ($report.destructive) { throw 'Exclusão/substituição detectada. Este workflow não aplica planos destrutivos.' }
+    if ($Operation -eq 'provision' -and $report.destructive) { throw 'Exclusão/substituição detectada. Este workflow não aplica planos destrutivos.' }
+    if ($Action -eq 'plan' -and $Operation -eq 'destroy') {
+        $message = 'Plano de descarte gerado; nenhuma exclusão executada. Revise os recursos e aprove em Review deployments na ação destroy.'
+        Write-Output $message
+        if ($env:GITHUB_STEP_SUMMARY) { $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+        if (!$report.has_changes) { & "$PSScriptRoot/Test-BaseDestroyed.ps1" -Environment $Environment }
+        return
+    }
     if ($Action -eq 'plan') {
         $message = if ($env:GITHUB_EVENT_NAME -eq 'push' -and $report.creates_cluster) {
             'Ambiente ausente: ativação pendente. Nenhum deploy realizado. Execute este workflow com action=activate; revise o resumo e aprove em Review deployments.'
@@ -81,7 +95,11 @@ try {
         & terraform "-chdir=$repoRoot/terraform" apply -input=false -no-color -lock-timeout=60s $plan *> $applyLog
         if ($LASTEXITCODE -ne 0) { Stop-TerraformFailure $applyLog 'Apply' }
     }
-    & "$PSScriptRoot/Test-BaseCluster.ps1" -Environment $Environment
+    if ($Operation -eq 'destroy') {
+        & "$PSScriptRoot/Test-BaseDestroyed.ps1" -Environment $Environment
+    } else {
+        & "$PSScriptRoot/Test-BaseCluster.ps1" -Environment $Environment
+    }
 } finally {
     foreach ($entry in $saved.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
 }

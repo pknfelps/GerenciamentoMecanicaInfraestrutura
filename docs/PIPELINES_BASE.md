@@ -16,7 +16,7 @@ Implementação inicial de 2026-09-30; ativação simplificada em 2026-10-01. Te
 
 `environments/hom.tfvars`, `prd.tfvars` e o exemplo usam bootstrap_cluster_creator_admin_permissions=false. Hom foi descartado pelo mantenedor para evitar custos; a configuração agora atende criação e recriação, sem depender de cluster prévio. O Terraform cria explicitamente as access entries do operador e das pipelines, evitando conflito com uma entry implícita da role criadora.
 
-Após cada descarte autorizado, manter o bootstrap persistente (backend, OIDC, roles e permissões) e executar uma nova ativação da base pelo workflow. Não é necessário criar VPC/EKS ou access entries manualmente. O descarte permanece separado deste workflow de provisionamento. Não há import, target, force-unlock, migração ou alteração automática do atributo. Se existir um cluster legado criado com true, não mudar o atributo em lugar: o provider propõe substituição e este workflow recusa planos destrutivos. Se já houver uma entry implícita da mesma role base, revisar/adotar o recurso em operação explícita antes de prosseguir.
+Após cada descarte autorizado, manter o bootstrap persistente (backend, OIDC, roles e permissões) e executar uma nova ativação da base pelo workflow. Não é necessário criar VPC/EKS ou access entries manualmente. O descarte usa o workflow manual separado base-destroy, com revisão e aprovação próprias. Não há import, target, force-unlock, migração ou alteração automática do atributo. Se existir um cluster legado criado com true, não mudar o atributo em lugar: o provider propõe substituição e este workflow recusa planos destrutivos. Se já houver uma entry implícita da mesma role base, revisar/adotar o recurso em operação explícita antes de prosseguir.
 
 ## Ativação em uma execução
 
@@ -28,6 +28,31 @@ Após cada descarte autorizado, manter o bootstrap persistente (backend, OIDC, r
 6. A execução valida cluster/node group/add-ons, nós Ready, pods de sistema e acesso Kubernetes da role base. Depois executar `aws-oidc-check` com check_kubernetes=true em infra/API/banco para comprovar as três identidades. Gateway mantém diagnóstico STS.
 
 `workflow_dispatch` já existe na branch padrão main. Para testar esta versão em hom, publicar em develop e selecionar develop no botão Run workflow; a promoção para main é necessária para usar esta versão em prd. Não é necessário criar VPC/EKS/access entries manualmente.
+
+## Descarte em uma execução — base-destroy
+
+1. Publicar os workflows/scripts/testes em develop e promover a versão revisada para main. **base-destroy é novo e precisa existir em main (branch padrão) para aparecer no botão Run workflow.** Depois selecionar develop para hom; main para prd. A publicação não ativa base ausente.
+2. Em Actions > base-destroy > Run workflow, escolher **develop / hom / destroy**. Para consultar exclusões sem aplicar, usar action=plan. Para prd: main / prd / destroy.
+3. Aguardar CI e abrir o resumo do plan de descarte: conferir ambiente, commit e lista de exclusões. Em Review deployments, selecionar hom-approval (ou prd-approval) e clicar **Approve and deploy**. Não copiar SHA/fingerprint.
+4. O job de descarte obtém sessão OIDC nova, regenera `plan -destroy` no mesmo commit, compara fingerprint e aplica somente o binário validado. Recurso ou plano alterado após aprovação interrompe a execução. Após falha parcial, preservar state e iniciar uma nova execução para revisar o que falta; não repetir automaticamente nem apagar o state.
+5. Conferir a mensagem final: estado vazio e EKS/VPC/NAT/Elastic IP ausentes. Estado já vazio é verificado sem apply e sem etapa de aprovação. Erro de leitura, permissão negada ou recurso remanescente falha a execução; não é tratado como ausência.
+
+Escopo: somente os recursos conhecidos de terraform/ e o backend `<ambiente>/base/terraform.tfstate`, workspace default. Inclui EKS, node group, add-ons, acessos EKS, roles de execução, VPC/subnets/rotas, NAT/Elastic IP e endpoint S3. O revisor valida endereços, tags Project/Environment/ManagedBy, nomes de cluster/roles, principals e vínculos de associações de rotas. Aceita somente exclusões; recusa criação, alteração, substituição, módulos, descarte parcial e recursos do bootstrap ou outro ambiente.
+
+Bootstrap, bucket/versionamento/locks do backend, OIDC, roles das pipelines, usuário mecanica e GitHub Environments permanecem. O workflow não opera estados de banco/API/auth nem exclui recursos criados fora da base (como volumes de workloads e load balancers). Quando houver consumidores, limpar seus recursos/dependências pelos respectivos componentes antes da base; descarte coordenado deles continua em E2.8. Não usar este workflow como comprovação de ausência de todos os recursos faturáveis da conta.
+
+Sem novos secrets ou apply de permissões para esta mudança: reutiliza as roles base e hom-approval/prd-approval. As policies versionadas já contêm as exclusões EKS/rede/IAM usadas. O grupo concurrency base-hom/base-prd é compartilhado com base-provision, impedindo operação concorrente dos dois workflows no mesmo ambiente, inclusive durante aprovação. Não existe trigger de push/PR/schedule para descarte.
+
+## Validação direta pelas pipelines
+
+Após publicar ambos os workflows, executar em hom na mesma revisão:
+
+1. **base-provision**, develop / hom / activate → revisar plano → aprovar → conferir apply e validação de cluster/node group/add-ons/nós/pods.
+2. **aws-oidc-check** em infra/API/banco, hom com check_kubernetes=true, para registrar as três identidades Kubernetes reais.
+3. **base-destroy**, develop / hom / destroy → revisar exclusões → aprovar → conferir estado vazio e ausência de EKS/VPC/NAT/Elastic IP.
+4. Opcionalmente repetir base-destroy/hom: ambiente já ausente deve passar nas consultas sem executar apply. Um push posterior em develop mantém ativação pendente; nova janela de uso começa com activate.
+
+Registrar URLs/IDs e commits dos runs e seus resultados. Testes locais não substituem essas evidências. Não usar plan antigo salvo em artifacts para executar novas operações.
 
 ## Configuração GitHub da aprovação
 
@@ -89,6 +114,8 @@ pwsh -NoProfile -File scripts/tests/Test-TerraformEnvironment.ps1
 pwsh -NoProfile -File scripts/tests/Test-BaseApprovalEnvironment.ps1
 pwsh -NoProfile -File scripts/tests/Test-BasePipelineTarget.ps1
 pwsh -NoProfile -File scripts/tests/Test-BasePipeline.ps1
+pwsh -NoProfile -File scripts/tests/Test-BaseDestroy.ps1
+pwsh -NoProfile -File scripts/tests/Test-BaseDestroyed.ps1
 python -m unittest discover -s scripts/tests -p 'test_*.py' -v
 ```
 
@@ -107,3 +134,7 @@ Validação da simplificação em 2026-10-01: actionlint, 12 cenários de config
 
 - [Aprovação nativa de deployments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments)
 - [Configuração de environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
+
+Validação do descarte em 2026-10-01: 15 cenários de orquestração, nove de verificação de ausência e oito testes Python novos aprovados; 22 de destino, 16 de provisionamento e nove testes Python existentes continuam aprovados. Actionlint dos três workflows e diff sem erros. Revisor aceitou offline o JSON do plano histórico de hom com 37 exclusões; esse plano foi apenas lido, não aplicado. Nenhuma chamada real AWS ou exclusão executada nesta implementação.
+
+- [Plan em modo destroy e aplicação de plano salvo](https://developer.hashicorp.com/terraform/cli/commands/plan)

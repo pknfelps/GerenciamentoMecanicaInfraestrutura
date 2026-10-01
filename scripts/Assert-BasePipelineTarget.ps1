@@ -3,6 +3,7 @@
 param(
     [Parameter(Mandatory)][ValidateSet('hom', 'prd')][string]$Environment,
     [ValidateSet('plan', 'apply', 'auto')][string]$Action = 'plan',
+    [ValidateSet('provision', 'destroy')][string]$Operation = 'provision',
     [string]$ExpectedCommit = '',
     [string]$ApprovedPlanSha256 = ''
 )
@@ -14,6 +15,9 @@ if ($env:GITHUB_REPOSITORY -cne 'pknfelps/GerenciamentoMecanicaInfraestrutura' -
 }
 if ($env:CONFIGURED_REGION -cne 'us-east-1' -or $env:CONFIGURED_ROLE_ARN -cne $expectedRole -or $env:CONFIGURED_STATE_BUCKET -cne 'mecanica-tfstate-121754142617-us-east-1') {
     throw 'Variáveis AWS_REGION/AWS_BASE_ROLE_ARN/TF_STATE_BUCKET incompatíveis com o destino.'
+}
+if ($Operation -eq 'destroy' -and ($env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or $Action -eq 'auto')) {
+    throw 'Descarte é exclusivo de workflow_dispatch, com plano e aprovação explícitos.'
 }
 if ($Action -eq 'auto' -and $env:GITHUB_EVENT_NAME -cne 'push') {
     throw 'Aplicação automática é exclusiva de push em develop/main.'

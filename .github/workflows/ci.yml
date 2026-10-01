@@ -52,6 +52,8 @@ jobs:
           ./scripts/tests/Test-BaseApprovalEnvironment.ps1
           ./scripts/tests/Test-BasePipelineTarget.ps1
           ./scripts/tests/Test-BasePipeline.ps1
+          ./scripts/tests/Test-BaseDestroy.ps1
+          ./scripts/tests/Test-BaseDestroyed.ps1
       - name: Test plan fingerprint, privacy and destructive change guards
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
