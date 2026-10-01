@@ -20,6 +20,7 @@ locals {
           "ec2:DescribeNatGateways",
           "ec2:DescribeVpcEndpoints",
           "ec2:DescribeVpcEndpointServices",
+          "ec2:DescribePrefixLists",
           "ec2:DescribeNetworkInterfaces",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeInstanceTypes",

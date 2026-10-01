@@ -39,6 +39,27 @@ O apply automático presume código revisado pelas proteções do repositório; 
 
 Falha parcial interrompe o workflow, preserva o estado e não marca sucesso. Nenhum retry de apply/descarte automático. Diagnóstico Kubernetes consulta identidade/can-i/listagens; não cria workloads. Não comprova capacidade funcional da API/observabilidade nem o lock concorrente E2.3.
 
+## Recuperação de hom após falha DescribePrefixLists — 2026-09-30
+
+Run 36802169063, action=apply, passou na revisão do commit/fingerprint e falhou por falta de ec2:DescribePrefixLists. Esta leitura está agora em ReadRegionalNetwork de base_network_create, Resource * com aws:RequestedRegion=us-east-1, para hom/prd. Aplicar o novo plano de bootstrap com identidade administrativa e seu backend existente antes de retomar a base. A role base não altera suas próprias permissões. A mudança esperada é nas duas policies base-network_create; revisar quaisquer outras diferenças.
+
+Inspeção read-only encontrou hom/base/terraform.tfstate serial 16, cluster mecanica-hom-eks ACTIVE, nenhuma node group e endpoint vpce-09666702ffe0585f4 available. O endpoint tem tipo Gateway, serviço com.amazonaws.us-east-1.s3, VPC vpc-06c168312ef0b72f7, rota rtb-05995c7a25f0200c9 e tags Project=mecanica, Environment=hom, ManagedBy=Terraform, Name=mecanica-hom-s3. O state contém o mesmo endpoint, mas com status tainted devido à falha de leitura após criação. Nenhum state foi editado pelo assistente.
+
+Para este incidente, depois de aplicar a correção de IAM, conferir novamente o ID/estado/tags/rotas e a marca tainted no state. Com nenhuma operação concorrente em andamento e as condições acima preservadas, remover somente a marca deste recurso (não recria nem exclui o endpoint):
+
+```powershell
+# Na raiz de GerenciamentoMecanicaInfraestrutura, identidade administrativa autorizada.
+./scripts/Invoke-TerraformEnvironment.ps1 -Environment hom -Action Init
+$selection = ./scripts/Invoke-TerraformEnvironment.ps1 -Environment hom -Action Show
+$env:TF_DATA_DIR = $selection.DataDirectory
+$env:TF_WORKSPACE = 'default'
+terraform -chdir=terraform untaint -lock-timeout=60s 'aws_vpc_endpoint.s3'
+```
+
+O seletor fixa hom/base/terraform.tfstate; não executar contra backend prd/local/bootstrap nem apagar o estado. Se o endpoint não estiver saudável ou os IDs/configuração diferirem, reavaliar a recuperação; não retirar taint às cegas. Um plan antes do untaint propõe substituir o endpoint e o workflow bloqueia corretamente esse plano destrutivo.
+
+Depois gerar um novo action=plan em develop/hom e action=apply com o novo commit/fingerprint revisado. O plano deve preservar o cluster/rede/endpoint e completar node group/add-ons; quaisquer exclusões/substituições exigem investigação. Não reutilizar o fingerprint 95cff1bad7f5529068c5a898d4cdfe629efaceba44a708abdb9f1444e7ab2d97 do plano inicial. Após sucesso, validar Kubernetes com aws-oidc-check nos três repositórios. Bootstrap IAM e untaint são operações explícitas do mantenedor; o workflow não ignora exclusões nem faz recuperação automática do state.
+
 ## Validação local
 
 ```powershell

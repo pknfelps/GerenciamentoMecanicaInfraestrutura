@@ -21,6 +21,17 @@ run "scoped_base_and_workload_permissions" {
     ])
     error_message = "Somente base recebe as policies operacionais, dentro do limite IAM."
   }
+  # O provider consulta a prefix list ao ler o gateway endpoint S3, inclusive após create.
+  assert {
+    condition = alltrue([
+      for environment, policy in local.base_network_create_policies :
+      contains(one([for statement in policy.Statement : statement if statement.Sid == "ReadRegionalNetwork"]).Action, "ec2:DescribePrefixLists") &&
+      one([for statement in policy.Statement : statement if statement.Sid == "ReadRegionalNetwork"]).Resource == ["*"] &&
+      one([for statement in policy.Statement : statement if statement.Sid == "ReadRegionalNetwork"]).Condition.StringEquals["aws:RequestedRegion"] == var.aws_region &&
+      aws_iam_role_policy_attachment.base_network_create[environment].role == aws_iam_role.pipeline["${environment}-base"].name
+    ])
+    error_message = "Base hom/prd precisam ler prefix lists regionais para criar/atualizar o endpoint S3."
+  }
   assert {
     condition = alltrue([
       for environment, policy in local.base_iam_policies :
