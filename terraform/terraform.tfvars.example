@@ -1,5 +1,7 @@
 # Somente parâmetros públicos; secrets nunca pertencem a este arquivo.
 environment         = "hom"
+# false para cluster novo. O hom existente fixa true em environments/hom.tfvars.
+bootstrap_cluster_creator_admin_permissions = false
 aws_region          = "us-east-1"
 kubernetes_version  = "1.36"
 vpc_cidr            = "10.0.0.0/16"

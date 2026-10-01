@@ -38,7 +38,8 @@ resource "aws_iam_role" "pipeline" {
 }
 
 # Permissões do bootstrap: estado, artefatos, publicação ECR e metadados.
-# Provisionamento de workloads e IAM/PassRole serão revisados em E2/E3.
+# base-permissions.tf adiciona provisionamento da base e DescribeCluster de API/banco.
+# Permissões de Aurora/Lambda/Gateway/secrets continuam em E2/E3.
 resource "aws_iam_role_policy" "pipeline" {
   for_each = local.roles
   name     = "bootstrap-access"

@@ -6,7 +6,7 @@ Mantém a infraestrutura AWS e a plataforma Kubernetes compartilhada pelos compo
 
 A base Terraform possui redes hom/prd, subnets públicas de suporte, privadas de workloads e isoladas de banco, NAT zonal/Elastic IP, endpoint S3, EKS em subnets privadas, IAM e add-ons. Cada ambiente está configurado com um nó t3.small On-Demand. O Service da API continua como `LoadBalancer`, sem a configuração final de NLB interno.
 
-**Bootstrap e inicialização dos backends estão confirmados. A rede privada e a capacidade hom/prd foram implementadas e testadas com provider simulado; provisionamento e validação em nuvem permanecem pendentes.** API Gateway, VPC Link, controller/NLB e integração dos workloads ainda precisam ser implementados.
+**Bootstrap e backends confirmados; base hom provisionada manualmente e acesso do operador validado. Permissões e workflows das pipelines estão implementados e testados localmente; aplicação das novas policies/access entries e execução remota ainda pendentes.** API Gateway, VPC Link, controller/NLB e integração dos workloads ainda precisam ser implementados.
 
 ## Estrutura e tecnologias
 
@@ -44,6 +44,12 @@ Este repositório manterá Gateway/VPC Link/composição OpenAPI e plataforma; L
 ## Bootstrap persistente
 
 A unidade [bootstrap/](bootstrap/README.md) prepara buckets de estado/artefatos, ECR e dez roles OIDC por componente/ambiente, com testes de plano sem AWS. Está separada do EKS herdado. O bootstrap foi aplicado, a migração do estado para S3 foi confirmada e os testes positivos OIDC foram executados. Permissões de workloads serão acrescentadas junto dos respectivos componentes.
+
+## Pipelines de provisionamento e diagnóstico
+
+[Procedimento completo](docs/PIPELINES_BASE.md): aplicar primeiro as novas permissões do bootstrap com identidade administrativa; depois executar base-provision plan/apply em hom. PRs validam sem AWS. O workflow usa OIDC, backends hom/prd, CI prévio, fingerprint/commit para apply manual e recusa exclusões/substituições. Push em develop/main atualiza somente bases já existentes; ativação de ambiente ausente exige execução manual revisada. Infra/API/banco possuem check_kubernetes opcional no aws-oidc-check, usando a identidade real de cada pipeline.
+
+O hom existente mantém bootstrap administrativo true para evitar substituição; prd e clusters novos usam false e entries explícitas. Após descartar hom, ajustar explicitamente seu arquivo para false antes de recriar. Policies completas: bootstrap/base-permissions.tf; acesso Kubernetes: terraform/pipeline-access.tf. Sem deploy da API/Aurora/Gateway neste passo.
 
 ## Pré-requisitos e validação local
 
@@ -142,7 +148,7 @@ Referências: [backend S3](https://developer.hashicorp.com/terraform/language/ba
 
 Cada camada ocupa as mesmas duas primeiras AZs elegíveis, preservando a exclusão de use1-az3 exigida pelo EKS. CIDRs são derivados de vpc_cidr para evitar sobreposição interna. A entrada public_subnet_cidrs foi removida; retirar esse campo de tfvars antigos e usar os arquivos por ambiente.
 
-Subnets não atribuem IP público automaticamente. EKS e node group usam somente as subnets de workloads, que recebem a tag internal-elb para a futura descoberta do NLB interno. As subnets de suporte/banco não recebem tags para descoberta de load balancer público. O endpoint administrativo EKS é público e privado: nós usam o caminho privado; runners externos usam a API pública autenticada. A configuração de acesso das roles das pipelines ao Kubernetes continua pendente.
+Subnets não atribuem IP público automaticamente. EKS e node group usam somente as subnets de workloads, que recebem a tag internal-elb para a futura descoberta do NLB interno. As subnets de suporte/banco não recebem tags para descoberta de load balancer público. O endpoint administrativo EKS é público e privado: nós usam o caminho privado; runners externos usam a API pública autenticada. As access entries das roles base/API/banco estão declaradas em pipeline-access.tf; aplicação e validação real dos runners continuam pendentes.
 
 Cada ambiente administra um NAT zonal na primeira subnet pública e seu Elastic IP no próprio estado. As rotas dos workloads dependem dele; a tabela do banco não contém rota padrão nem associação ao endpoint S3. NAT/EIP são destruídos com a base após seus dependentes, preservando o bootstrap; o descarte completo ainda precisa coordenar workloads, banco e NLB antes da base.
 
@@ -173,7 +179,7 @@ Referência: [versões e calendário de suporte do Amazon EKS](https://docs.aws.
 
 [eks-access.tf](terraform/eks-access.tf) consulta o usuário IAM existente mecanica e registra uma access entry STANDARD no cluster de cada ambiente, associada à AmazonEKSClusterAdminPolicy com escopo cluster. Esse operador administra os recursos Kubernetes de todo o cluster. O Terraform não cria o usuário nem gerencia suas credenciais/policies IAM.
 
-O cluster usa API_AND_CONFIG_MAP: habilita access entries e mantém o mecanismo aws-auth existente. A migração ocorre em lugar, sem recriar o EKS. Depois de habilitar a API, não é possível retornar ao modo exclusivamente CONFIG_MAP. Acesso das roles das pipelines será implementado separadamente.
+O cluster usa API_AND_CONFIG_MAP: habilita access entries e mantém o mecanismo aws-auth existente. A migração ocorre em lugar, sem recriar o EKS. Depois de habilitar a API, não é possível retornar ao modo exclusivamente CONFIG_MAP. O acesso das roles base/API/banco está declarado separadamente em pipeline-access.tf; ver docs/PIPELINES_BASE.md para ativação e validação.
 
 Após aplicar o plano, configure um perfil AWS autenticado como mecanica e confirme sua identidade antes de usar kubectl:
 

@@ -1,3 +1,10 @@
+variable "bootstrap_cluster_creator_admin_permissions" {
+  description = "Preservar true somente no hom existente; clusters novos usam false e access entries explícitas. Alterar em cluster existente pode substituí-lo."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "environment" {
   description = "Ambiente de implantação: hom ou prd."
   type        = string

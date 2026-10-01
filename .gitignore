@@ -35,3 +35,7 @@ artifacts/
 bootstrap/backend.s3.tf
 bootstrap/backend.hcl
 *.tfplan.json
+
+# Cache Python dos testes de revisão de planos
+__pycache__/
+*.pyc
