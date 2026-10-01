@@ -21,6 +21,24 @@ run "scoped_base_and_workload_permissions" {
     ])
     error_message = "Somente base recebe as policies operacionais, dentro do limite IAM."
   }
+  # CreateNodegroup valida a SLR existente mesmo quando CreateServiceLinkedRole está permitido.
+  assert {
+    condition = alltrue([
+      for environment, policy in local.base_iam_policies :
+      one([for statement in policy.Statement : statement if statement.Sid == "ReadEksNodegroupServiceRole"]).Effect == "Allow" &&
+      one([for statement in policy.Statement : statement if statement.Sid == "ReadEksNodegroupServiceRole"]).Action == ["iam:GetRole"] &&
+      one([for statement in policy.Statement : statement if statement.Sid == "ReadEksNodegroupServiceRole"]).Resource == [
+        "arn:aws:iam::${var.aws_account_id}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+      ] &&
+      alltrue(flatten([for statement in policy.Statement : contains(statement.Action, "iam:GetRole") ? [for resource in statement.Resource : contains([
+        "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-cluster-role",
+        "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-node-role",
+        "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-ebs-csi-role",
+        "arn:aws:iam::${var.aws_account_id}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+      ], resource)] : []]))
+    ])
+    error_message = "Base hom/prd precisam consultar a SLR de node groups, sem conceder GetRole em roles arbitrárias ou de outro ambiente."
+  }
   # O provider consulta a prefix list ao ler o gateway endpoint S3, inclusive após create.
   assert {
     condition = alltrue([

@@ -245,3 +245,10 @@ Este componente não oferece endpoints de negócio; manterá a entrada da API e 
 ### Descarte manual da base
 
 `base-destroy` executa CI, plano de exclusão, aprovação em Review deployments e descarte verificado na mesma execução. Selecionar develop/hom ou main/prd e action=destroy; action=plan somente consulta. Preserva bootstrap/backend/OIDC e outro ambiente, usando as mesmas roles e environments de aprovação do provisionamento. O novo workflow precisa estar publicado em main para disponibilizar Run workflow. [Operação e validação do ciclo completo](docs/PIPELINES_BASE.md).
+
+
+### Gatilhos de CI
+
+O CI automático valida PRs destinados a develop/main, sem uma segunda execução por push. Novos commits cancelam os checks antigos do mesmo PR; execução manual continua disponível. Os nomes dos jobs/checks foram preservados.
+
+base-provision mantém push em develop/main e chama o CI reutilizável antes de planejar/aplicar o commit implantado; base-destroy continua manual. Essa validação do provisionamento tem concorrência separada dos checks de PR e não é cancelada por eles.
