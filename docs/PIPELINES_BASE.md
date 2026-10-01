@@ -14,9 +14,9 @@ Implementação local de 2026-09-30. Não comprova aplicação ou execução no 
 
 ## Cluster existente e clusters novos
 
-`environments/hom.tfvars` preserva bootstrap_cluster_creator_admin_permissions=true do cluster já criado pelo operador. Não mudar em lugar: esse atributo é de criação e o provider propõe substituir o cluster. `prd.tfvars` e o exemplo usam false para criação nova, evitando que EKS crie automaticamente uma entry da role base e conflite com a entry do Terraform.
+`environments/hom.tfvars`, `prd.tfvars` e o exemplo usam bootstrap_cluster_creator_admin_permissions=false. Hom foi descartado pelo mantenedor para evitar custos; a configuração agora atende criação e recriação, sem depender de cluster prévio. O Terraform cria explicitamente as access entries do operador e das pipelines, evitando conflito com uma entry implícita da role criadora.
 
-Após um descarte autorizado de hom, mudar explicitamente o arquivo hom para false antes da recriação. O workflow recusa criar cluster com true. Não há import, target, force-unlock, migração, destroy ou alteração automática desse atributo. Se um cluster tiver sido criado fora desse fluxo pela mesma role base e já tiver entry implícita, revisar/adotar o recurso em uma operação explícita antes de prosseguir.
+Após cada descarte autorizado, manter o bootstrap persistente (backend, OIDC, roles e permissões) e executar um novo plan/apply da base pelo workflow. Não é necessário criar VPC/EKS ou access entries manualmente. O descarte permanece separado deste workflow de provisionamento. Não há import, target, force-unlock, migração ou alteração automática do atributo. Se existir um cluster legado criado com true, não mudar o atributo em lugar: o provider propõe substituição e este workflow recusa planos destrutivos. Se já houver uma entry implícita da mesma role base, revisar/adotar o recurso em operação explícita antes de prosseguir.
 
 ## Ordem de ativação pelo mantenedor
 

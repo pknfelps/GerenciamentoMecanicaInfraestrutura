@@ -54,7 +54,7 @@ try {
     if ($Action -eq 'plan') { return }
     if ($report.destructive) { throw 'Exclusão/substituição detectada. Este workflow não aplica planos destrutivos.' }
     if ($Action -eq 'auto' -and $report.creates_cluster) {
-        $message = 'Ambiente ausente: ativação pendente. Revise plan e execute apply manual; nenhuma infraestrutura ativada por push.'
+        $message = 'Ambiente ausente: criação/recriação pendente. Este workflow cria a base completa, sem cluster prévio. Execute action=plan e depois action=apply neste workflow, com expected_commit e approved_plan_sha256 do resumo revisado. Nenhuma infraestrutura ativada por push.'
         Write-Output $message
         if ($env:GITHUB_STEP_SUMMARY) { $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
         return
