@@ -14,7 +14,7 @@ Unidade Terraform independente de `../terraform/`, que ainda representa o EKS he
 
 Buckets, ECR e provider criado têm `prevent_destroy`. Buckets/ECR também não permitem remoção forçada de conteúdo. Não há expiração automática de imagens, versões ou contratos: referências por digest e rollback precisam continuar válidas. O bootstrap é persistente e nunca integra o descarte normal de um ambiente. As proteções do Terraform não substituem IAM e não protegem recursos removidos completamente da configuração.
 
-O provider recusa conta diferente de `aws_account_id`. Backend remoto e recursos do bootstrap permanecem sob identidade administrativa própria, fora das roles de deploy. Nenhuma role das pipelines pode alterar IAM, excluir buckets, acessar o estado do bootstrap ou assumir outras roles.
+O provider recusa conta diferente de `aws_account_id`. Backend remoto e recursos do bootstrap permanecem sob identidade administrativa própria, fora das roles de deploy. As roles base podem administrar somente as três roles de execução EKS do próprio ambiente, com associações de policies limitadas por role e PassRole por serviço. Nenhuma role pode alterar a identidade/permissões das pipelines, excluir buckets ou acessar o estado do bootstrap. Não há permissão sts:AssumeRole nas pipelines.
 
 ## Inputs e configuração inicial
 
@@ -46,7 +46,9 @@ Cada role possui uma política `bootstrap-access`. Os statements gerados em `ide
 
 API não acessa estado Terraform. API publica `contracts/api/` e `packages/GerenciamentoMecanica.Auth.Contracts/`; autenticação lê o pacote e publica `contracts/auth/` e `lambda/`; Gateway lê os dois contratos e publica `contracts/gateway/`. Base/banco não recebem acesso ao bucket de artefatos neste estágio.
 
-Essas são roles de pipeline, não de execução dos pods/Lambda. Permissões para gerenciar EKS, Aurora, Lambda, Gateway, secrets e roles de execução serão implementadas/revisadas junto dos respectivos componentes em E2/E3. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
+As permissões da base foram acrescentadas em [base-permissions.tf](base-permissions.tf): quatro policies gerenciadas por ambiente para EC2/EKS/IAM, anexadas somente à base; API/banco recebem DescribeCluster do ambiente. IAM/PassRole limitado às três roles EKS e policies de serviço correspondentes. Não há gerenciamento de roles OIDC pela pipeline. Access entries Kubernetes ficam na unidade da base. Aplicar estas alterações de bootstrap com identidade administrativa, seguindo [PIPELINES_BASE.md](../docs/PIPELINES_BASE.md).
+
+Essas são roles de pipeline, não de execução dos pods/Lambda. Permissões para gerenciar Aurora, Lambda, Gateway e secrets continuam junto dos respectivos componentes em E2/E3. EKS e suas roles de execução estão cobertos pela ampliação da base descrita acima. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
 
 ## Estados e locking
 

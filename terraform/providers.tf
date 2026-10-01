@@ -1,14 +1,8 @@
 provider "aws" {
-  region = var.aws_region
+  region              = var.aws_region
+  allowed_account_ids = ["121754142617"]
 
   default_tags {
-    tags = merge(
-      {
-        Project   = var.cluster_name
-        ManagedBy = "Terraform"
-      },
-      var.tags
-    )
+    tags = local.common_tags
   }
 }
-

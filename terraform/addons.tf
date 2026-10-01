@@ -15,7 +15,7 @@ data "aws_iam_policy_document" "ebs_csi_assume_role" {
 }
 
 resource "aws_iam_role" "ebs_csi" {
-  name               = "${var.cluster_name}-ebs-csi-role"
+  name               = "${local.cluster_name}-ebs-csi-role"
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role.json
 }
 
