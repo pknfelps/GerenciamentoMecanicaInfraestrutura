@@ -109,7 +109,38 @@ try {
     Assert-That ($global:mecanicaApplyCalls -eq 3) 'Identidade errada/init falho não podem aplicar.'
     Assert-That ($env:TF_DATA_DIR -eq 'previous-directory') 'Falhas devem restaurar seleção.'
     Assert-That ((Get-Content "$fixture/summary.md" -Raw) -notlike '*principal_arn*') 'Resumo não pode incluir valores do plano.'
-    Write-Output '10 cenários de orquestração aprovados: plan, aprovação, hash divergente, auto existente/ausente, substituição, falhas plan/apply/init e identidade.'
+    # A base não precisa existir: o apply manual cria e valida o cluster.
+    $global:mecanicaIdentityAccount = '121754142617'
+    $global:mecanicaPlan.resource_changes[0].type = 'aws_eks_cluster'
+    $global:mecanicaPlan.resource_changes[0].change.after = @{access_config=@(@{bootstrap_cluster_creator_admin_permissions=$false})}
+    $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
+    & $pipeline -Environment hom -Action plan | Out-Null
+    $fingerprint = (Get-Content "$fixture/artifacts/terraform/hom/pipeline/review.json" -Raw | ConvertFrom-Json).sha256
+    & $pipeline -Environment hom -Action apply -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint | Out-Null
+    Assert-That ($global:mecanicaApplyCalls -eq 4 -and $global:mecanicaClusterChecks -eq 3) 'Apply manual deve criar a base ausente e validar.'
+    # Com a base ativa e sem alterações, apenas verificar sua saúde.
+    $global:mecanicaPlan.resource_changes[0].change.before = $global:mecanicaPlan.resource_changes[0].change.after
+    $global:mecanicaPlan.resource_changes[0].change.actions = @('no-op')
+    $global:mecanicaPlanExit = 0
+    $env:GITHUB_EVENT_NAME = 'push'
+    & $pipeline -Environment hom -Action auto | Out-Null
+    Assert-That ($global:mecanicaApplyCalls -eq 4 -and $global:mecanicaClusterChecks -eq 4) 'Base ativa sem alterações deve validar sem apply.'
+    # Simula descarte externo: um novo plan/apply deve recriar, sem pré-provisionamento.
+    $global:mecanicaPlan.resource_changes[0].change.before = $null
+    $global:mecanicaPlan.resource_changes[0].change.actions = @('create')
+    $global:mecanicaPlanExit = 2
+    & $pipeline -Environment hom -Action auto | Out-Null
+    Assert-That ($global:mecanicaApplyCalls -eq 4 -and $global:mecanicaClusterChecks -eq 4) 'Push após descarte deve manter a ativação pendente.'
+    Assert-That ((Get-Content "$fixture/summary.md" -Raw) -like '*sem cluster prévio*action=plan*action=apply*') 'Resumo deve explicar como recriar pelo workflow.'
+    $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
+    & $pipeline -Environment hom -Action plan | Out-Null
+    $fingerprint = (Get-Content "$fixture/artifacts/terraform/hom/pipeline/review.json" -Raw | ConvertFrom-Json).sha256
+    & $pipeline -Environment hom -Action apply -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint | Out-Null
+    Assert-That ($global:mecanicaApplyCalls -eq 5 -and $global:mecanicaClusterChecks -eq 5) 'Apply manual após descarte deve recriar e validar.'
+    $global:mecanicaPlan.resource_changes[0].change.after.access_config[0].bootstrap_cluster_creator_admin_permissions = $true
+    Assert-Refused { & $pipeline -Environment hom -Action apply -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint } 'Plano recusado'
+    Assert-That ($global:mecanicaApplyCalls -eq 5) 'Cluster novo com bootstrap implícito não pode ser aplicado.'
+    Write-Output '14 cenários aprovados, incluindo criação, base ativa sem alterações e recriação após descarte, com bloqueio de bootstrap implícito.'
 } finally {
     foreach ($entry in $saved.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
     foreach ($name in @('aws','terraform','python3')) { Remove-Item "Function:$name" }

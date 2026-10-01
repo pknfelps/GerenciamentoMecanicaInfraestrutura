@@ -53,6 +53,24 @@ class ReviewTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError): module.review(plan)
 
+    def test_existing_legacy_cluster_can_keep_creator_access(self):
+        plan = example()
+        item = plan['resource_changes'][0]
+        item['type'] = 'aws_eks_cluster'
+        item['change']['actions'] = ['update']
+        item['change']['after'] = {'access_config': [{'bootstrap_cluster_creator_admin_permissions': True}]}
+        self.assertFalse(module.review(plan)['creates_cluster'])
+
+    def test_cluster_replacement_remains_destructive_with_creator_disabled(self):
+        plan = example()
+        item = plan['resource_changes'][0]
+        item['type'] = 'aws_eks_cluster'
+        item['change']['actions'] = ['delete', 'create']
+        item['change']['after'] = {'access_config': [{'bootstrap_cluster_creator_admin_permissions': False}]}
+        report = module.review(plan)
+        self.assertTrue(report['creates_cluster'])
+        self.assertTrue(report['destructive'])
+
     def test_noop_and_output_only_changes(self):
         plan = example()
         plan['resource_changes'][0]['change']['actions'] = ['no-op']

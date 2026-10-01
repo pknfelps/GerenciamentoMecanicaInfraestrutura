@@ -1,7 +1,7 @@
 # Somente parâmetros públicos; secrets nunca pertencem a este arquivo.
 environment = "hom"
-# Preserva o cluster hom provisionado pelo operador; não alterar em lugar.
-bootstrap_cluster_creator_admin_permissions = true
+# Criação e recriação usam access entries explícitas, sem acesso implícito do criador.
+bootstrap_cluster_creator_admin_permissions = false
 aws_region                                  = "us-east-1"
 kubernetes_version                          = "1.36"
 vpc_cidr                                    = "10.0.0.0/16"

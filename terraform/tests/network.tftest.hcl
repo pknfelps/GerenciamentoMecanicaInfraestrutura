@@ -37,7 +37,7 @@ run "private_network_and_single_node" {
   assert {
     condition = (
       aws_eks_cluster.main.access_config[0].authentication_mode == "API_AND_CONFIG_MAP" &&
-      aws_eks_cluster.main.access_config[0].bootstrap_cluster_creator_admin_permissions == (var.environment == "hom") &&
+      aws_eks_cluster.main.access_config[0].bootstrap_cluster_creator_admin_permissions == false &&
       data.aws_iam_user.operator.user_name == "mecanica" &&
       aws_eks_access_entry.operator.type == "STANDARD" &&
       aws_eks_access_entry.operator.principal_arn == "arn:aws:iam::121754142617:user/mecanica" &&
