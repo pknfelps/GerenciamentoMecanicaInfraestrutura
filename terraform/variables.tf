@@ -1,36 +1,48 @@
+variable "bootstrap_cluster_creator_admin_permissions" {
+  description = "Preservar true somente no hom existente; clusters novos usam false e access entries explícitas. Alterar em cluster existente pode substituí-lo."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "environment" {
+  description = "Ambiente de implantação: hom ou prd."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = contains(["hom", "prd"], var.environment)
+    error_message = "O ambiente deve ser hom ou prd."
+  }
+}
+
 variable "aws_region" {
   description = "Região AWS onde a infraestrutura será criada."
   type        = string
   default     = "us-east-1"
 }
 
-variable "cluster_name" {
-  description = "Nome do cluster EKS. Deve permanecer alinhado com a pipeline de deploy."
-  type        = string
-  default     = "api-cluster"
-}
-
 variable "kubernetes_version" {
-  description = "Versão do Kubernetes usada pelo EKS. Quando nula, a AWS seleciona a versão padrão disponível."
+  description = "Versão minor explícita do Kubernetes para o cluster EKS e seu Managed Node Group."
   type        = string
-  default     = null
-  nullable    = true
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^1[.][0-9]+$", var.kubernetes_version))
+    error_message = "Informe a versão minor do Kubernetes no formato 1.N, como 1.36."
+  }
 }
 
 variable "vpc_cidr" {
-  description = "Bloco CIDR IPv4 reservado para a VPC."
+  description = "Rede IPv4 /16 do ambiente; seis subnets /24 são derivadas sem sobreposição."
   type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "public_subnet_cidrs" {
-  description = "Blocos CIDR das duas subnets públicas do cluster."
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+  nullable    = false
 
   validation {
-    condition     = length(var.public_subnet_cidrs) == 2
-    error_message = "Informe exatamente dois blocos CIDR para as subnets públicas."
+    condition = can(cidrnetmask(var.vpc_cidr)) && try(
+      split("/", var.vpc_cidr)[1] == "16" && cidrhost(var.vpc_cidr, 0) == split("/", var.vpc_cidr)[0], false
+    )
+    error_message = "Informe uma rede IPv4 /16 canônica, como 10.0.0.0/16."
   }
 }
 
@@ -65,7 +77,7 @@ variable "node_min_size" {
 variable "node_desired_size" {
   description = "Quantidade desejada de nós do Managed Node Group."
   type        = number
-  default     = 2
+  default     = 1
 
   validation {
     condition     = var.node_desired_size >= 1
@@ -76,7 +88,7 @@ variable "node_desired_size" {
 variable "node_max_size" {
   description = "Quantidade máxima de nós do Managed Node Group."
   type        = number
-  default     = 3
+  default     = 1
 
   validation {
     condition     = var.node_max_size >= 1
@@ -85,8 +97,7 @@ variable "node_max_size" {
 }
 
 variable "tags" {
-  description = "Tags adicionais aplicadas aos recursos AWS."
+  description = "Tags adicionais aplicadas aos recursos AWS. Project, Environment e ManagedBy são definidos pela infraestrutura e têm precedência."
   type        = map(string)
   default     = {}
 }
-

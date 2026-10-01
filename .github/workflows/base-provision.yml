@@ -1,0 +1,93 @@
+name: base-provision
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'terraform/**'
+      - 'scripts/**'
+      - '.github/workflows/base-provision.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Destino: develop/hom ou main/prd'
+        required: true
+        default: hom
+        type: choice
+        options: [hom, prd]
+      action:
+        description: 'Plan para revisar; apply exige commit e fingerprint revisados'
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      expected_commit:
+        description: 'Apply: SHA completo do commit exibido no plan'
+        type: string
+      approved_plan_sha256:
+        description: 'Apply: fingerprint SHA-256 exibido no plan'
+        type: string
+
+permissions: {}
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  provision:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    environment: ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
+    concurrency:
+      group: base-${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
+      TARGET_ACTION: ${{ github.event_name == 'push' && 'auto' || inputs.action }}
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      APPROVED_PLAN_SHA256: ${{ inputs.approved_plan_sha256 }}
+      CONFIGURED_REGION: ${{ vars.AWS_REGION }}
+      CONFIGURED_ROLE_ARN: ${{ vars.AWS_BASE_ROLE_ARN }}
+      CONFIGURED_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      AWS_PAGER: ''
+      TF_IN_AUTOMATION: 'true'
+      CHECKPOINT_DISABLE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate target before AWS authentication
+        run: |
+          ./scripts/Assert-BasePipelineTarget.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.1
+      - name: Authenticate base role with OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.CONFIGURED_REGION }}
+          role-to-assume: ${{ env.CONFIGURED_ROLE_ARN }}
+          allowed-account-ids: '121754142617'
+          audience: sts.amazonaws.com
+          role-session-name: base-${{ github.run_id }}-${{ github.run_attempt }}
+          role-duration-seconds: 3600
+          unset-current-credentials: true
+          use-existing-credentials: false
+          output-credentials: false
+          translate-env-variables: false
+      - name: Plan, enforce approval and provision the selected base
+        run: |
+          ./scripts/Invoke-BasePipeline.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
