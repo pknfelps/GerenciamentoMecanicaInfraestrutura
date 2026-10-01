@@ -231,6 +231,30 @@ locals {
   base_network_manage_policies = { for environment in local.environments : environment => {
     "Version" : "2012-10-17",
     "Statement" : [
+      # O NAT já removeu a associação; aws_eip ainda chama o ID salvo no plano.
+      # Exclui ambos os tipos reais suportados pela ação, permitindo somente a
+      # chamada idempotente sem AllocationId/NetworkInterfaceID de recurso real.
+      # Não usar Resource="*" nem condições de tags IfExists para essa chamada.
+      {
+        "Sid" : "DisassociateMissingAddress",
+        "Effect" : "Allow",
+        "Action" : [
+          "ec2:DisassociateAddress"
+        ],
+        "NotResource" : [
+          "arn:aws:ec2:*:*:elastic-ip/*",
+          "arn:aws:ec2:*:*:network-interface/*"
+        ],
+        "Condition" : {
+          "StringEquals" : {
+            "aws:RequestedRegion" : "${var.aws_region}"
+          },
+          "Null" : {
+            "ec2:AllocationId" : "true",
+            "ec2:NetworkInterfaceID" : "true"
+          }
+        }
+      },
       {
         "Sid" : "ManageOwnNetwork",
         "Effect" : "Allow",
