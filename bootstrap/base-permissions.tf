@@ -736,6 +736,16 @@ locals {
         }
       },
       {
+        "Sid" : "ReadEksNodegroupServiceRole",
+        "Effect" : "Allow",
+        "Action" : [
+          "iam:GetRole"
+        ],
+        "Resource" : [
+          "arn:aws:iam::${var.aws_account_id}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+        ]
+      },
+      {
         "Sid" : "CreateEksServiceRoles",
         "Effect" : "Allow",
         "Action" : [
