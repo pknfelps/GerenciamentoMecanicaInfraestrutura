@@ -41,7 +41,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao ler o plano salvo.' }
     $python = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } else { 'python' }
     $reviewArgs = @("$PSScriptRoot/review_base_plan.py", $json, '--report', $reportPath)
-    if ($Action -eq 'apply') { $reviewArgs += @('--expected-sha256', $ApprovedPlanSha256) }
+    if ($ApprovedPlanSha256) { $reviewArgs += @('--expected-sha256', $ApprovedPlanSha256) }
     & $python @reviewArgs
     if ($LASTEXITCODE -ne 0) { throw 'Plano recusado pela revisão; nenhum apply executado.' }
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
@@ -51,10 +51,27 @@ try {
     )
     foreach ($change in $report.changes) { $summary += "| $($change.address) | $($change.actions -join '/') |" }
     if ($env:GITHUB_STEP_SUMMARY) { $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
-    if ($Action -eq 'plan') { return }
+    # Somente metadados seguros passam entre jobs; os planos/valores ficam no runner.
+    if ($env:GITHUB_OUTPUT) {
+        @(
+            "commit=$($env:GITHUB_SHA)", "sha256=$($report.sha256)",
+            "destructive=$($report.destructive.ToString().ToLowerInvariant())",
+            "creates_cluster=$($report.creates_cluster.ToString().ToLowerInvariant())"
+        ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+    }
     if ($report.destructive) { throw 'Exclusão/substituição detectada. Este workflow não aplica planos destrutivos.' }
+    if ($Action -eq 'plan') {
+        $message = if ($env:GITHUB_EVENT_NAME -eq 'push' -and $report.creates_cluster) {
+            'Ambiente ausente: ativação pendente. Nenhum deploy realizado. Execute este workflow com action=activate; revise o resumo e aprove em Review deployments.'
+        } else {
+            'Plano gerado; nenhum apply realizado. Na ação activate, revise este resumo antes de aprovar em Review deployments. Na ação plan, a execução termina aqui.'
+        }
+        Write-Output $message
+        if ($env:GITHUB_STEP_SUMMARY) { $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+        return
+    }
     if ($Action -eq 'auto' -and $report.creates_cluster) {
-        $message = 'Ambiente ausente: criação/recriação pendente. Este workflow cria a base completa, sem cluster prévio. Execute action=plan e depois action=apply neste workflow, com expected_commit e approved_plan_sha256 do resumo revisado. Nenhuma infraestrutura ativada por push.'
+        $message = 'Ambiente ausente: criação/recriação pendente. Este workflow cria a base completa, sem cluster prévio. Execute action=activate e aprove o plano em Review deployments; commit/fingerprint são conferidos automaticamente. Nenhuma infraestrutura ativada por push.'
         Write-Output $message
         if ($env:GITHUB_STEP_SUMMARY) { $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
         return

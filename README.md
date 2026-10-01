@@ -47,7 +47,7 @@ A unidade [bootstrap/](bootstrap/README.md) prepara buckets de estado/artefatos,
 
 ## Pipelines de provisionamento e diagnóstico
 
-[Procedimento completo](docs/PIPELINES_BASE.md): aplicar primeiro as novas permissões do bootstrap com identidade administrativa; depois executar base-provision plan/apply em hom. PRs validam sem AWS. O workflow usa OIDC, backends hom/prd, CI prévio, fingerprint/commit para apply manual e recusa exclusões/substituições. Push em develop/main atualiza somente bases já existentes; ativação de ambiente ausente exige execução manual revisada. Infra/API/banco possuem check_kubernetes opcional no aws-oidc-check, usando a identidade real de cada pipeline.
+[Procedimento completo](docs/PIPELINES_BASE.md): aplicar primeiro as novas permissões do bootstrap com identidade administrativa; depois executar base-provision com action=activate em develop/hom e aprovar o resumo em Review deployments. Plan, aprovação e apply ocorrem na mesma execução, com commit/fingerprint conferidos automaticamente. PRs validam sem AWS. O workflow usa OIDC, backends hom/prd, CI prévio e recusa exclusões/substituições. Push em develop/main atualiza somente bases já existentes; ativação de ambiente ausente exige execução manual revisada. Infra/API/banco possuem check_kubernetes opcional no aws-oidc-check, usando a identidade real de cada pipeline.
 
 O hom existente mantém bootstrap administrativo true para evitar substituição; prd e clusters novos usam false e entries explícitas. Após descartar hom, ajustar explicitamente seu arquivo para false antes de recriar. Policies completas: bootstrap/base-permissions.tf; acesso Kubernetes: terraform/pipeline-access.tf. Sem deploy da API/Aurora/Gateway neste passo.
 

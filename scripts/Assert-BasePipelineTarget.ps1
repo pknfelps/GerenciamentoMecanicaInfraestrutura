@@ -18,11 +18,16 @@ if ($env:CONFIGURED_REGION -cne 'us-east-1' -or $env:CONFIGURED_ROLE_ARN -cne $e
 if ($Action -eq 'auto' -and $env:GITHUB_EVENT_NAME -cne 'push') {
     throw 'Aplicação automática é exclusiva de push em develop/main.'
 }
+if ($Action -eq 'auto' -and ($ExpectedCommit -or $ApprovedPlanSha256)) {
+    if ($ExpectedCommit -cnotmatch '^[a-f0-9]{40}$' -or $ExpectedCommit -cne $env:GITHUB_SHA -or $ApprovedPlanSha256 -cnotmatch '^[a-fA-F0-9]{64}$') {
+        throw 'Auto exige commit/fingerprint internos válidos quando fornecidos pelo job de plan.'
+    }
+}
 if ($Action -eq 'apply') {
     if ($env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or $ExpectedCommit -cnotmatch '^[a-f0-9]{40}$' -or $ExpectedCommit -cne $env:GITHUB_SHA) {
-        throw 'Apply manual exige o SHA completo da revisão selecionada e workflow_dispatch.'
+        throw 'Apply exige commit interno da execução selecionada e workflow_dispatch.'
     }
     if ($ApprovedPlanSha256 -cnotmatch '^[a-fA-F0-9]{64}$') {
-        throw 'Apply manual exige o fingerprint SHA-256 do plan revisado.'
+        throw 'Apply exige o fingerprint interno do job de plan revisado.'
     }
 }

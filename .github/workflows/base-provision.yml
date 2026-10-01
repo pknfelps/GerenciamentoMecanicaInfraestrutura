@@ -1,4 +1,5 @@
 name: base-provision
+run-name: Base ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }} / ${{ inputs.action || 'auto' }} / ${{ github.ref_name }}
 
 on:
   push:
@@ -16,19 +17,18 @@ on:
         type: choice
         options: [hom, prd]
       action:
-        description: 'Plan para revisar; apply exige commit e fingerprint revisados'
+        description: 'activate: planejar, aguardar aprovação e aplicar; plan: somente consultar'
         required: true
         default: plan
         type: choice
-        options: [plan, apply]
-      expected_commit:
-        description: 'Apply: SHA completo do commit exibido no plan'
-        type: string
-      approved_plan_sha256:
-        description: 'Apply: fingerprint SHA-256 exibido no plan'
-        type: string
+        options: [plan, activate]
 
 permissions: {}
+
+# Serializa o ciclo inteiro, inclusive a espera pela aprovação; não cancela apply.
+concurrency:
+  group: base-${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -36,45 +36,47 @@ jobs:
     permissions:
       contents: read
 
-  provision:
+  plan:
     needs: validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 15
     environment: ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
-    concurrency:
-      group: base-${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
-      cancel-in-progress: false
     permissions:
       contents: read
+      actions: read
       id-token: write
+    outputs:
+      commit: ${{ steps.plan.outputs.commit }}
+      sha256: ${{ steps.plan.outputs.sha256 }}
+      destructive: ${{ steps.plan.outputs.destructive }}
+      creates_cluster: ${{ steps.plan.outputs.creates_cluster }}
     defaults:
       run:
         shell: pwsh
     env:
       TARGET_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
-      TARGET_ACTION: ${{ github.event_name == 'push' && 'auto' || inputs.action }}
-      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
-      APPROVED_PLAN_SHA256: ${{ inputs.approved_plan_sha256 }}
       CONFIGURED_REGION: ${{ vars.AWS_REGION }}
       CONFIGURED_ROLE_ARN: ${{ vars.AWS_BASE_ROLE_ARN }}
       CONFIGURED_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       AWS_PAGER: ''
       TF_IN_AUTOMATION: 'true'
-      CHECKPOINT_DISABLE: '1'
+      CHECKPOINT_DISABLE: 1
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Validate target before AWS authentication
-        run: |
-          ./scripts/Assert-BasePipelineTarget.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
+        run: ./scripts/Assert-BasePipelineTarget.ps1 -Environment $env:TARGET_ENVIRONMENT -Action plan
+      - name: Require a configured approval environment for activation
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'activate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/Assert-BaseApprovalEnvironment.ps1 -Environment $env:TARGET_ENVIRONMENT
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.9
           terraform_wrapper: false
-      - uses: azure/setup-kubectl@v4
-        with:
-          version: v1.36.1
       - name: Authenticate base role with OIDC
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -82,12 +84,91 @@ jobs:
           role-to-assume: ${{ env.CONFIGURED_ROLE_ARN }}
           allowed-account-ids: '121754142617'
           audience: sts.amazonaws.com
-          role-session-name: base-${{ github.run_id }}-${{ github.run_attempt }}
+          role-session-name: base-plan-${{ github.run_id }}-${{ github.run_attempt }}
           role-duration-seconds: 3600
           unset-current-credentials: true
           use-existing-credentials: false
           output-credentials: false
           translate-env-variables: false
-      - name: Plan, enforce approval and provision the selected base
+      - name: Plan and publish only the review summary
+        id: plan
+        run: ./scripts/Invoke-BasePipeline.ps1 -Environment $env:TARGET_ENVIRONMENT -Action plan
+
+  approval:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'activate' && needs.plan.outputs.destructive == 'false'
+    name: Aprovar plano da base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: ${{ inputs.environment == 'prd' && 'prd-approval' || 'hom-approval' }}
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary
+    permissions: {}
+    steps:
+      # Este job não recebe OIDC, credenciais AWS, planos binários ou states.
+      - name: Record approval of this run
+        run: echo 'Plano desta execução aprovado. O apply verificará automaticamente o mesmo commit e fingerprint.'
+
+  apply:
+    needs: [plan, approval]
+    if: >-
+      !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.destructive == 'false' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.action == 'activate' && needs.approval.result == 'success') ||
+       (github.event_name == 'push' && needs.plan.outputs.creates_cluster == 'false'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    environment: ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prd' || 'hom') }}
+      TARGET_ACTION: ${{ github.event_name == 'push' && 'auto' || 'apply' }}
+      EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
+      APPROVED_PLAN_SHA256: ${{ needs.plan.outputs.sha256 }}
+      CONFIGURED_REGION: ${{ vars.AWS_REGION }}
+      CONFIGURED_ROLE_ARN: ${{ vars.AWS_BASE_ROLE_ARN }}
+      CONFIGURED_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      AWS_PAGER: ''
+      TF_IN_AUTOMATION: 'true'
+      CHECKPOINT_DISABLE: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate the commit and fingerprint passed by the plan job
         run: |
-          ./scripts/Invoke-BasePipeline.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
+          if (!$env:EXPECTED_COMMIT -or !$env:APPROVED_PLAN_SHA256) { throw 'Metadados do job plan ausentes; nenhum apply autorizado.' }
+          ./scripts/Assert-BasePipelineTarget.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
+      - name: Recheck approval configuration before AWS authentication
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/Assert-BaseApprovalEnvironment.ps1 -Environment $env:TARGET_ENVIRONMENT
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.1
+      - name: Authenticate base role after approval with fresh credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.CONFIGURED_REGION }}
+          role-to-assume: ${{ env.CONFIGURED_ROLE_ARN }}
+          allowed-account-ids: '121754142617'
+          audience: sts.amazonaws.com
+          role-session-name: base-apply-${{ github.run_id }}-${{ github.run_attempt }}
+          role-duration-seconds: 3600
+          unset-current-credentials: true
+          use-existing-credentials: false
+          output-credentials: false
+          translate-env-variables: false
+      - name: Replan, compare and apply the selected base
+        run: ./scripts/Invoke-BasePipeline.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256

@@ -29,6 +29,10 @@ try {
         $env:GITHUB_EVENT_NAME = 'push'
         & $script -Environment $environment -Action auto
         $cases++
+        & $script -Environment $environment -Action auto -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 ('b' * 64)
+        Assert-Refused { & $script -Environment $environment -Action auto -ExpectedCommit ('c' * 40) -ApprovedPlanSha256 ('b' * 64) }
+        Assert-Refused { & $script -Environment $environment -Action auto -ApprovedPlanSha256 ('b' * 64) }
+        $cases += 3
         $env:GITHUB_REF = 'refs/pull/123/merge'
         Assert-Refused { & $script -Environment $environment }
         $cases++
