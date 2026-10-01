@@ -46,7 +46,7 @@ def main():
     args.report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
     if args.expected_sha256 and result["sha256"] != args.expected_sha256.lower():
-        raise SystemExit("O plano mudou desde a revisão. Execute plan e revise o novo fingerprint.")
+        raise SystemExit("O plano mudou desde a revisão. Inicie nova ativação e aprove o novo resumo; nenhum apply executado.")
 
 
 if __name__ == "__main__":

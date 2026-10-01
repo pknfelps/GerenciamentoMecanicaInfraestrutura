@@ -14,7 +14,7 @@ $pipeline = "$fixture/scripts/Invoke-BasePipeline.ps1"
 $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
 if (!$pythonCommand) { $pythonCommand = Get-Command python -ErrorAction Stop }
 $global:mecanicaTestPython = $pythonCommand.Source
-$names = @('GITHUB_REPOSITORY', 'GITHUB_REF', 'GITHUB_SHA', 'GITHUB_EVENT_NAME', 'CONFIGURED_REGION', 'CONFIGURED_ROLE_ARN', 'CONFIGURED_STATE_BUCKET', 'TF_DATA_DIR', 'TF_WORKSPACE', 'TF_INPUT', 'TF_CLI_ARGS', 'GITHUB_STEP_SUMMARY')
+$names = @('GITHUB_REPOSITORY', 'GITHUB_REF', 'GITHUB_SHA', 'GITHUB_EVENT_NAME', 'CONFIGURED_REGION', 'CONFIGURED_ROLE_ARN', 'CONFIGURED_STATE_BUCKET', 'TF_DATA_DIR', 'TF_WORKSPACE', 'TF_INPUT', 'TF_CLI_ARGS', 'GITHUB_STEP_SUMMARY', 'GITHUB_OUTPUT')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 foreach ($name in @('aws','terraform','python3')) { if (Test-Path "Function:$name") { throw "Execute sem função $name prévia." } }
@@ -74,8 +74,12 @@ try {
     $env:TF_INPUT = 'true'
     $env:TF_CLI_ARGS = $null
     $env:GITHUB_STEP_SUMMARY = "$fixture/summary.md"
+    $env:GITHUB_OUTPUT = "$fixture/outputs.txt"
     & $pipeline -Environment hom -Action plan | Out-Null
     Assert-That ($global:mecanicaApplyCalls -eq 0) 'Plan não pode aplicar.'
+    $outputs = Get-Content "$fixture/outputs.txt" -Raw
+    Assert-That ($outputs -match '(?m)^commit=a{40}' -and $outputs -match '(?m)^sha256=[a-f0-9]{64}' -and $outputs -match '(?m)^destructive=false') 'Plan deve passar commit/fingerprint e classificação automaticamente.'
+    Assert-That ($outputs -notlike '*principal_arn*' -and $outputs -notlike '*base-hom*') 'Outputs entre jobs não podem expor valores.'
     Assert-That ($env:TF_DATA_DIR -eq 'previous-directory' -and $env:TF_INPUT -eq 'true') 'Plan deve restaurar variáveis.'
     $fingerprint = (Get-Content "$fixture/artifacts/terraform/hom/pipeline/review.json" -Raw | ConvertFrom-Json).sha256
     & $pipeline -Environment hom -Action apply -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint | Out-Null
@@ -131,7 +135,7 @@ try {
     $global:mecanicaPlanExit = 2
     & $pipeline -Environment hom -Action auto | Out-Null
     Assert-That ($global:mecanicaApplyCalls -eq 4 -and $global:mecanicaClusterChecks -eq 4) 'Push após descarte deve manter a ativação pendente.'
-    Assert-That ((Get-Content "$fixture/summary.md" -Raw) -like '*sem cluster prévio*action=plan*action=apply*') 'Resumo deve explicar como recriar pelo workflow.'
+    Assert-That ((Get-Content "$fixture/summary.md" -Raw) -like '*action=activate*Review deployments*') 'Resumo deve explicar como recriar pelo workflow.'
     $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
     & $pipeline -Environment hom -Action plan | Out-Null
     $fingerprint = (Get-Content "$fixture/artifacts/terraform/hom/pipeline/review.json" -Raw | ConvertFrom-Json).sha256
@@ -140,7 +144,14 @@ try {
     $global:mecanicaPlan.resource_changes[0].change.after.access_config[0].bootstrap_cluster_creator_admin_permissions = $true
     Assert-Refused { & $pipeline -Environment hom -Action apply -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint } 'Plano recusado'
     Assert-That ($global:mecanicaApplyCalls -eq 5) 'Cluster novo com bootstrap implícito não pode ser aplicado.'
-    Write-Output '14 cenários aprovados, incluindo criação, base ativa sem alterações e recriação após descarte, com bloqueio de bootstrap implícito.'
+    # Drift após a aprovação deve falhar mesmo com fingerprint internamente válido.
+    $global:mecanicaPlan.resource_changes[0].change.after.access_config[0].bootstrap_cluster_creator_admin_permissions = $false
+    $global:mecanicaPlan.resource_changes[0].change.after.name = 'changed-after-approval'
+    Assert-Refused { & $pipeline -Environment hom -Action apply -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint } 'Plano recusado'
+    $env:GITHUB_EVENT_NAME = 'push'
+    Assert-Refused { & $pipeline -Environment hom -Action auto -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint } 'Plano recusado'
+    Assert-That ($global:mecanicaApplyCalls -eq 5) 'Drift entre jobs não pode aplicar, inclusive no push.'
+    Write-Output '16 cenários aprovados: metadados entre jobs, drift após aprovação, criação/recriação, ausência no push e bloqueios de plano/identidade.'
 } finally {
     foreach ($entry in $saved.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
     foreach ($name in @('aws','terraform','python3')) { Remove-Item "Function:$name" }
