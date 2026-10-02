@@ -108,3 +108,31 @@ Não há workflow que aplique este bootstrap automaticamente. Alterações do bo
 - [Testes com provider simulado](https://developer.hashicorp.com/terraform/language/tests/mocking).
 - [S3: exigir escrita condicional](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).
 - [AWS: claims GitHub disponíveis para condições IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#condition-keys-wif).
+
+## Consulta da base pela role do banco
+
+`database-metadata-permissions.tf` acrescenta a policy inline `database-metadata-read`
+nas roles database de hom/prd. Contém somente DescribeVpcs, DescribeSubnets,
+DescribeRouteTables e DescribeSecurityGroups, limitadas a us-east-1. Essas ações EC2
+exigem Resource `*`; o consumidor confere conta, ambiente, tags e relações dos recursos.
+Não modifica trust, acesso Kubernetes, namespace SSM nem permissões de escrita.
+
+A configuração passou nos testes simulados e foi aplicada no backend remoto existente
+em 2026-10-02: 2 policies criadas, nenhuma alteração/exclusão. O plano posterior
+retornou No changes; as policies IAM reais de hom/prd foram conferidas. Evidências
+locais ignoradas pelo Git: `artifacts/terraform/bootstrap/database-release-read-2026-10-02`.
+A role database também recebeu `database-aurora-rds` e `database-aurora-network`
+para provisionar apenas o cluster, writer, subnet group e SG reservados ao próprio
+ambiente. O bootstrap compartilha e protege contra destroy a service-linked role
+`AWSServiceRoleForRDS`; a role do GitHub não recebe `iam:PassRole`, criação de roles
+ou leitura de valores no Secrets Manager. As quatro policies de Aurora e a role de
+serviço foram aplicadas em 2026-10-02 (5 criações, nenhuma alteração/exclusão),
+com plano posterior `No changes`. Access Analyzer retornou zero findings; simulações
+de policies e das roles reais confirmaram criação no próprio ambiente e negação
+para outro ambiente, leitura de secrets e PassRole. Evidência local ignorada pelo
+Git: `artifacts/terraform/bootstrap/database-aurora-iam-2026-10-02`.
+
+Versionar esta configuração e a policy de consulta antes de uma futura aplicação
+do bootstrap a partir de outro checkout. Isso não cria o cluster nem as credenciais
+específicas da API/função; o workflow de provisionamento do banco segue pendente.
+[Procedimento do consumidor](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados/blob/develop/docs/CONSUMO_BASE.md).
