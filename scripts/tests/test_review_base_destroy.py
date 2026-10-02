@@ -16,6 +16,23 @@ def example(environment="hom"):
 
 
 class DestroyTests(unittest.TestCase):
+    def test_generation_and_auth_group_are_owned_by_environment_vpc(self):
+        plan = example()
+        plan['resource_changes'][0]['change']['before']['id'] = 'vpc-11111111'
+        tags = plan['resource_changes'][0]['change']['before']['tags_all']
+        for address, kind, before in [
+            ('terraform_data.generation', 'terraform_data', {'id': 'uuid', 'input': {'environment': 'hom', 'vpc_id': 'vpc-11111111'}}),
+            ('aws_security_group.auth', 'aws_security_group', {'name': 'mecanica-hom-auth', 'vpc_id': 'vpc-11111111', 'tags_all': tags})]:
+            plan['resource_changes'].append({'address': address, 'type': kind, 'mode': 'managed', 'change': {'actions': ['delete'], 'before': before, 'after': None}})
+        review_destroy(plan, 'hom')
+        plan['resource_changes'][-1]['change']['before']['vpc_id'] = 'vpc-22222222'
+        with self.assertRaises(ValueError): review_destroy(plan, 'hom')
+        # After partial destruction, only the local identity resource may remain.
+        plan['resource_changes'] = [plan['resource_changes'][1]]
+        review_destroy(plan, 'hom')
+        plan['resource_changes'][0]['change']['before']['input']['environment'] = 'prd'
+        with self.assertRaises(ValueError): review_destroy(plan, 'hom')
+
     def test_both_environments_and_empty_state(self):
         for environment in ("hom", "prd"):
             plan = example(environment)

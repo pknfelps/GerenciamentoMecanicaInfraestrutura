@@ -9,7 +9,9 @@ foreach ($name in @('Assert-BasePipelineTarget.ps1', 'Invoke-BasePipeline.ps1', 
 Copy-Item "$repo/terraform/environments/*.tfvars" "$fixture/terraform/environments/"
 Copy-Item "$repo/terraform/backends/*.hcl" "$fixture/terraform/backends/"
 $global:destroyPython = (Get-Command python -ErrorAction Stop).Source
-$names = @('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_EVENT_NAME','CONFIGURED_REGION','CONFIGURED_ROLE_ARN','CONFIGURED_STATE_BUCKET','TF_DATA_DIR','TF_WORKSPACE','TF_INPUT','TF_CLI_ARGS','GITHUB_STEP_SUMMARY','GITHUB_OUTPUT')
+$names = @('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_EVENT_NAME','CONFIGURED_REGION','CONFIGURED_ROLE_ARN','CONFIGURED_STATE_BUCKET','TF_DATA_DIR','TF_WORKSPACE','TF_INPUT','TF_CLI_ARGS','GITHUB_STEP_SUMMARY','GITHUB_OUTPUT', 'RUNNER_TEMP')
+$global:metadataCommands = @()
+$global:metadataFailures = @{}
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 foreach ($name in @('aws','terraform','python3')) { if (Test-Path "Function:$name") { throw 'Função de teste já existe.' } }
@@ -54,7 +56,14 @@ function terraform {
         default { throw 'Operação Terraform inesperada.' }
     }
 }
-function python3 { & $global:destroyPython @args; $global:LASTEXITCODE = $LASTEXITCODE }
+function python3 {
+    if ($args[0] -like '*base_metadata.py') {
+        $global:metadataCommands += $args[1]
+        $global:LASTEXITCODE = if ($global:metadataFailures.ContainsKey($args[1])) { $global:metadataFailures[$args[1]] } else { 0 }
+        return
+    }
+    & $global:destroyPython @args; $global:LASTEXITCODE = $LASTEXITCODE
+}
 function Refused([scriptblock]$Action, [string]$Message) {
     $failed = $false
     try { & $Action | Out-Null } catch { if ($_.Exception.Message -notlike "*$Message*") { throw }; $failed=$true }
@@ -80,6 +89,7 @@ try {
             @{address='aws_vpc.main';type='aws_vpc';mode='managed';change=@{actions=@('delete');before=@{id="vpc-$environment";tags_all=@{Project='mecanica';Environment=$environment;ManagedBy='Terraform'}};after=$null}}
         )}
         & $pipeline -Environment $environment -Operation destroy -Action plan | Out-Null
+        if ($environment -eq 'hom' -and $global:metadataCommands.Count -ne 0) { throw 'Plan alterou SSM.' }
         if ($global:destroyApplies -ne $(if ($environment -eq 'hom') { 0 } else { 1 })) { throw 'Plan excluiu recursos.' }
         if ($global:destroyPlans[-1] -notcontains '-destroy') { throw 'Plano sem modo destroy.' }
         $hash = (Get-Content "$fixture/artifacts/terraform/$environment/destroy-pipeline/review.json" -Raw | ConvertFrom-Json).sha256
@@ -114,7 +124,15 @@ try {
     Refused { & $pipeline -Environment prd -Operation destroy -Action plan } 'estado da base ainda'
     if ($env:TF_DATA_DIR -ne 'previous-data') { throw 'Descarte não restaurou seleção.' }
     if ((Get-Content "$fixture/outputs.txt" -Raw) -match 'vpc-|tags_all') { throw 'Metadados públicos vazaram valores.' }
-    Write-Output '15 cenários de descarte aprovados: hom/prd, plano/aprovação/drift, isolamento, falhas parciais e estado vazio.'
+    $global:destroyRemaining = $false
+    $hash = (Get-Content "$fixture/artifacts/terraform/prd/destroy-pipeline/review.json" -Raw | ConvertFrom-Json).sha256
+    $global:metadataCommands = @()
+    & $pipeline -Environment prd -Operation destroy -Action apply -ExpectedCommit ('a'*40) -ApprovedPlanSha256 $hash | Out-Null
+    if (($global:metadataCommands -join ',') -ne 'begin,destroyed' -or $global:destroyApplies -ne 3) { throw 'Estado vazio precisa limpar SSM sem apply Terraform.' }
+    $global:metadataFailures = @{destroyed=1}
+    Refused { & $pipeline -Environment prd -Operation destroy -Action apply -ExpectedCommit ('a'*40) -ApprovedPlanSha256 $hash } 'limpeza SSM falhou'
+    if ($global:metadataCommands[-1] -ne 'failed') { throw 'Falha de limpeza precisa registrar falha.' }
+    Write-Output '17 cenários de descarte aprovados, incluindo limpeza SSM com estado vazio e falha de limpeza.'
 } finally {
     foreach ($entry in $saved.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
     foreach ($name in @('aws','terraform','python3')) { Remove-Item "Function:$name" }

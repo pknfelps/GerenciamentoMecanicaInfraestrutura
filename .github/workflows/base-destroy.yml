@@ -90,7 +90,7 @@ jobs:
 
   approval:
     needs: plan
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy' && needs.plan.outputs.has_changes == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
     name: Aprovar descarte da base
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -105,7 +105,7 @@ jobs:
 
   destroy:
     needs: [plan, approval]
-    if: needs.plan.result == 'success' && needs.approval.result == 'success' && inputs.action == 'destroy' && needs.plan.outputs.has_changes == 'true'
+    if: needs.plan.result == 'success' && needs.approval.result == 'success' && inputs.action == 'destroy'
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     environment: ${{ inputs.environment }}
