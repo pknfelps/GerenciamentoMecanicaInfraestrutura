@@ -14,7 +14,9 @@ $pipeline = "$fixture/scripts/Invoke-BasePipeline.ps1"
 $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
 if (!$pythonCommand) { $pythonCommand = Get-Command python -ErrorAction Stop }
 $global:mecanicaTestPython = $pythonCommand.Source
-$names = @('GITHUB_REPOSITORY', 'GITHUB_REF', 'GITHUB_SHA', 'GITHUB_EVENT_NAME', 'CONFIGURED_REGION', 'CONFIGURED_ROLE_ARN', 'CONFIGURED_STATE_BUCKET', 'TF_DATA_DIR', 'TF_WORKSPACE', 'TF_INPUT', 'TF_CLI_ARGS', 'GITHUB_STEP_SUMMARY', 'GITHUB_OUTPUT')
+$names = @('GITHUB_REPOSITORY', 'GITHUB_REF', 'GITHUB_SHA', 'GITHUB_EVENT_NAME', 'CONFIGURED_REGION', 'CONFIGURED_ROLE_ARN', 'CONFIGURED_STATE_BUCKET', 'TF_DATA_DIR', 'TF_WORKSPACE', 'TF_INPUT', 'TF_CLI_ARGS', 'GITHUB_STEP_SUMMARY', 'GITHUB_OUTPUT', 'RUNNER_TEMP')
+$global:metadataCommands = @()
+$global:metadataFailures = @{}
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 foreach ($name in @('aws','terraform','python3')) { if (Test-Path "Function:$name") { throw "Execute sem função $name prévia." } }
@@ -43,6 +45,7 @@ function terraform {
             $global:LASTEXITCODE = $global:mecanicaPlanExit
         }
         'show' { $global:mecanicaPlan | ConvertTo-Json -Depth 100; $global:LASTEXITCODE = 0 }
+        'output' { '{}'; $global:LASTEXITCODE = 0 }
         'apply' {
             if (!(Test-Path -LiteralPath $args[-1]) -or $args -contains '-auto-approve') { throw 'Apply precisa do binário já revisado.' }
             $global:mecanicaApplyCalls++
@@ -51,7 +54,14 @@ function terraform {
         default { throw 'Operação Terraform inesperada.' }
     }
 }
-function python3 { & $global:mecanicaTestPython @args; $global:LASTEXITCODE = $LASTEXITCODE }
+function python3 {
+    if ($args[0] -like '*base_metadata.py') {
+        $global:metadataCommands += $args[1]
+        $global:LASTEXITCODE = if ($global:metadataFailures.ContainsKey($args[1])) { $global:metadataFailures[$args[1]] } else { 0 }
+        return
+    }
+    & $global:mecanicaTestPython @args; $global:LASTEXITCODE = $LASTEXITCODE
+}
 function Assert-That([bool]$Condition, [string]$Message) { if (!$Condition) { throw $Message } }
 function Assert-Refused([scriptblock]$Action, [string]$Message) {
     $failed = $false
@@ -62,6 +72,7 @@ function Assert-Refused([scriptblock]$Action, [string]$Message) {
     Assert-That $failed "Era esperada recusa: $Message"
 }
 try {
+    $env:RUNNER_TEMP = $fixture
     $env:GITHUB_REPOSITORY = 'pknfelps/GerenciamentoMecanicaInfraestrutura'
     $env:GITHUB_REF = 'refs/heads/develop'
     $env:GITHUB_SHA = 'a' * 40
@@ -77,6 +88,7 @@ try {
     $env:GITHUB_OUTPUT = "$fixture/outputs.txt"
     & $pipeline -Environment hom -Action plan | Out-Null
     Assert-That ($global:mecanicaApplyCalls -eq 0) 'Plan não pode aplicar.'
+    Assert-That ($global:metadataCommands.Count -eq 0) 'Plan não pode alterar metadados.'
     $outputs = Get-Content "$fixture/outputs.txt" -Raw
     Assert-That ($outputs -match '(?m)^commit=a{40}' -and $outputs -match '(?m)^sha256=[a-f0-9]{64}' -and $outputs -match '(?m)^destructive=false') 'Plan deve passar commit/fingerprint e classificação automaticamente.'
     Assert-That ($outputs -notlike '*principal_arn*' -and $outputs -notlike '*base-hom*') 'Outputs entre jobs não podem expor valores.'
@@ -151,7 +163,22 @@ try {
     $env:GITHUB_EVENT_NAME = 'push'
     Assert-Refused { & $pipeline -Environment hom -Action auto -ExpectedCommit ('a' * 40) -ApprovedPlanSha256 $fingerprint } 'Plano recusado'
     Assert-That ($global:mecanicaApplyCalls -eq 5) 'Drift entre jobs não pode aplicar, inclusive no push.'
-    Write-Output '16 cenários aprovados: metadados entre jobs, drift após aprovação, criação/recriação, ausência no push e bloqueios de plano/identidade.'
+    # Caminho sem mudanças ainda precisa validar/publicar; falhas SSM não podem virar sucesso.
+    $global:mecanicaPlan.resource_changes[0].change.actions = @('no-op')
+    foreach ($command in @('begin','prepare','publish')) {
+        $global:metadataCommands = @()
+        $global:metadataFailures = @{$command=1}
+        Assert-Refused { & $pipeline -Environment hom -Action auto } $(switch ($command) { begin {'início dos metadados'} prepare {'perfil database'} publish {'publicação SSM'} })
+        Assert-That ($global:metadataCommands[-1] -eq 'failed') 'Falha deve invocar recuperação dos metadados.'
+        Assert-That ($global:mecanicaApplyCalls -eq 5) 'Reconciliação sem mudanças não pode aplicar.'
+    }
+    $global:metadataFailures = @{publish=3}
+    Assert-Refused { & $pipeline -Environment hom -Action auto } 'Dependência bloqueada'
+    $global:metadataFailures = @{}
+    $global:metadataCommands = @()
+    & $pipeline -Environment hom -Action auto | Out-Null
+    Assert-That (($global:metadataCommands -join ',') -eq 'begin,prepare,publish') 'Publicação deve seguir a ordem do protocolo.'
+    Write-Output '21 cenários de provisionamento aprovados, incluindo falhas SSM e acesso do banco pendente.'
 } finally {
     foreach ($entry in $saved.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
     foreach ($name in @('aws','terraform','python3')) { Remove-Item "Function:$name" }

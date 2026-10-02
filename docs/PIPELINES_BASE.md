@@ -173,3 +173,7 @@ Validação da simplificação em 2026-10-01: actionlint, 12 cenários de config
 Validação do descarte em 2026-10-01: 15 cenários de orquestração, nove de verificação de ausência e oito testes Python novos aprovados; 22 de destino, 16 de provisionamento e nove testes Python existentes continuam aprovados. Actionlint dos três workflows e diff sem erros. Revisor aceitou offline o JSON do plano histórico de hom com 37 exclusões; esse plano foi apenas lido, não aplicado. Nenhuma chamada real AWS ou exclusão executada nesta implementação.
 
 - [Plan em modo destroy e aplicação de plano salvo](https://developer.hashicorp.com/terraform/cli/commands/plan)
+
+## Publicação SSM do perfil database — 2026-10-02
+
+O fluxo agora invalida metadados antes do apply e publica database-release após checks de rede/EKS/SGs/namespace e evidência da role real do banco. Primeira ativação pode terminar blocked aguardando aws-oidc-check do banco; repetir uma ativação completa depois do check. Destroy aprovado limpa SSM mesmo com estado vazio; plan não altera SSM. A policy nova do SG precisa ser aplicada no bootstrap antes da primeira execução. Procedimento completo e tratamento de falhas: [Metadados da base](METADADOS_BASE.md).

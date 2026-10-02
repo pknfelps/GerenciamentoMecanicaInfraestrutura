@@ -9,8 +9,9 @@ from review_base_plan import review
 ACCOUNT = "121754142617"
 TAGGED = {"aws_vpc", "aws_subnet", "aws_internet_gateway", "aws_route_table",
           "aws_eip", "aws_nat_gateway", "aws_vpc_endpoint", "aws_iam_role",
-          "aws_eks_cluster", "aws_eks_node_group", "aws_eks_addon"}
+          "aws_eks_cluster", "aws_eks_node_group", "aws_eks_addon", "aws_security_group"}
 SINGLE = {
+    "terraform_data.generation", "aws_security_group.auth",
     "aws_vpc.main", "aws_internet_gateway.main", "aws_eip.nat", "aws_nat_gateway.main",
     "aws_vpc_endpoint.s3", "aws_eks_cluster.main", "aws_eks_node_group.main",
     "aws_iam_role.eks_cluster", "aws_iam_role.eks_nodes", "aws_iam_role.ebs_csi",
@@ -62,6 +63,16 @@ def review_destroy(plan, environment):
             tags = before.get("tags_all") or before.get("tags") or {}
             if any(tags.get(key) != value for key, value in {"Project": "mecanica", "Environment": environment, "ManagedBy": "Terraform"}.items()):
                 raise ValueError("Recurso sem tags de propriedade do ambiente; descarte recusado.")
+        if kind == "terraform_data":
+            identity = before.get("input") or {}
+            vpc = previous.get("aws_vpc.main", {}).get("id")
+            if (identity.get("environment") != environment or
+                    not re.fullmatch(r"vpc-[0-9a-f]{8,17}", identity.get("vpc_id", "")) or
+                    (vpc and identity.get("vpc_id") != vpc)):
+                raise ValueError("Geração fora da VPC/ambiente revisados.")
+        if kind == "aws_security_group":
+            if before.get("name") != f"{prefix}-auth" or before.get("vpc_id") != previous.get("aws_vpc.main", {}).get("id"):
+                raise ValueError("Security group fora da base revisada.")
         if kind == "aws_iam_role" and before.get("name") not in roles:
             raise ValueError("Role fora da base; bootstrap deve ser preservado.")
         if kind == "aws_iam_role_policy_attachment":

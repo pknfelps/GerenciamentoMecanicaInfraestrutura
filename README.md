@@ -252,3 +252,7 @@ Este componente não oferece endpoints de negócio; manterá a entrada da API e 
 O CI automático valida PRs destinados a develop/main, sem uma segunda execução por push. Novos commits cancelam os checks antigos do mesmo PR; execução manual continua disponível. Os nomes dos jobs/checks foram preservados.
 
 base-provision mantém push em develop/main e chama o CI reutilizável antes de planejar/aplicar o commit implantado; base-destroy continua manual. Essa validação do provisionamento tem concorrência separada dos checks de PR e não é cancelada por eles.
+
+## Metadados SSM para o banco (E2.14)
+
+O perfil database e a invalidação no descarte estão implementados localmente. Consulte [Metadados da base](docs/METADADOS_BASE.md) para atualizar o bootstrap, ativar a base, registrar o check com a role real do banco e publicar database-release. NLB/JWT e a release completa permanecem nas próximas etapas.

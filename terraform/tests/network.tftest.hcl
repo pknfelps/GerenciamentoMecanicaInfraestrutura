@@ -36,6 +36,22 @@ run "private_network_and_single_node" {
 
   assert {
     condition = (
+      can(regex("^[a-f0-9-]{36}$", output.base_generation)) &&
+      terraform_data.generation.input.environment == var.environment &&
+      terraform_data.generation.input.vpc_id == aws_vpc.main.id &&
+      length(output.database_exports) == 9 &&
+      output.database_exports["namespace"] == "default" &&
+      output.database_exports["api-security-group-id"] == aws_eks_cluster.main.vpc_config[0].cluster_security_group_id &&
+      output.database_exports["init-security-group-id"] == output.database_exports["api-security-group-id"] &&
+      output.database_exports["auth-security-group-id"] == aws_security_group.auth.id &&
+      aws_security_group.auth.vpc_id == aws_vpc.main.id &&
+      aws_security_group.auth.tags["Name"] == "mecanica-${var.environment}-auth"
+    )
+    error_message = "Metadados precisam identificar a geração, namespace e origens efetivas dos consumidores."
+  }
+
+  assert {
+    condition = (
       aws_eks_cluster.main.access_config[0].authentication_mode == "API_AND_CONFIG_MAP" &&
       aws_eks_cluster.main.access_config[0].bootstrap_cluster_creator_admin_permissions == false &&
       data.aws_iam_user.operator.user_name == "mecanica" &&
@@ -143,5 +159,24 @@ run "private_network_and_single_node" {
       output.database_subnet_ids == aws_subnet.database[*].id
     )
     error_message = "Capacidade deve ser um t3.small On-Demand; outputs devem identificar as subnets corretas."
+  }
+}
+
+run "generation_survives_update" {
+  command = apply
+  assert {
+    condition     = output.base_generation == run.private_network_and_single_node.base_generation
+    error_message = "Atualizar a mesma base deve preservar sua geração."
+  }
+}
+
+run "generation_changes_with_new_vpc" {
+  command = apply
+  plan_options {
+    replace = [aws_vpc.main]
+  }
+  assert {
+    condition     = output.base_generation != run.private_network_and_single_node.base_generation
+    error_message = "Recriar a VPC deve substituir a geração da base."
   }
 }
