@@ -48,7 +48,7 @@ API não acessa estado Terraform. API publica `contracts/api/` e `packages/Geren
 
 As permissões da base foram acrescentadas em [base-permissions.tf](base-permissions.tf): quatro policies gerenciadas por ambiente para EC2/EKS/IAM, anexadas somente à base; API/banco recebem DescribeCluster do ambiente. IAM/PassRole limitado às três roles EKS e policies de serviço correspondentes. Não há gerenciamento de roles OIDC pela pipeline. Access entries Kubernetes ficam na unidade da base. Aplicar estas alterações de bootstrap com identidade administrativa, seguindo [PIPELINES_BASE.md](../docs/PIPELINES_BASE.md).
 
-Essas são roles de pipeline, não de execução dos pods/Lambda. Permissões para gerenciar Aurora, Lambda, Gateway e secrets continuam junto dos respectivos componentes em E2/E3. EKS e suas roles de execução estão cobertos pela ampliação da base descrita acima. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
+Essas são roles de pipeline, não de execução dos pods/Lambda. A role database recebe permissões para RDS PostgreSQL em [database-rds-permissions.tf](database-rds-permissions.tf). Permissões de Lambda, Gateway e seus secrets continuam junto dos respectivos componentes em E2/E3. EKS e suas roles de execução estão cobertos pela ampliação da base descrita acima. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
 
 ## Estados e locking
 
@@ -121,18 +121,29 @@ A configuração passou nos testes simulados e foi aplicada no backend remoto ex
 em 2026-10-02: 2 policies criadas, nenhuma alteração/exclusão. O plano posterior
 retornou No changes; as policies IAM reais de hom/prd foram conferidas. Evidências
 locais ignoradas pelo Git: `artifacts/terraform/bootstrap/database-release-read-2026-10-02`.
-A role database também recebeu `database-aurora-rds` e `database-aurora-network`
-para provisionar apenas o cluster, writer, subnet group e SG reservados ao próprio
-ambiente. O bootstrap compartilha e protege contra destroy a service-linked role
-`AWSServiceRoleForRDS`; a role do GitHub não recebe `iam:PassRole`, criação de roles
-ou leitura de valores no Secrets Manager. As quatro policies de Aurora e a role de
-serviço foram aplicadas em 2026-10-02 (5 criações, nenhuma alteração/exclusão),
-com plano posterior `No changes`. Access Analyzer retornou zero findings; simulações
-de policies e das roles reais confirmaram criação no próprio ambiente e negação
-para outro ambiente, leitura de secrets e PassRole. Evidência local ignorada pelo
-Git: `artifacts/terraform/bootstrap/database-aurora-iam-2026-10-02`.
+A configuração anterior criou `database-aurora-rds`, `database-aurora-network`
+em hom/prd e a service-linked role compartilhada `AWSServiceRoleForRDS` em
+2026-10-02 (5 criações, nenhuma alteração/exclusão). Access Analyzer não encontrou
+findings naquele plano; as simulações cobriram os recursos Aurora de cada ambiente.
+Evidência local ignorada pelo Git:
+`artifacts/terraform/bootstrap/database-aurora-iam-2026-10-02`.
 
-Versionar esta configuração e a policy de consulta antes de uma futura aplicação
-do bootstrap a partir de outro checkout. Isso não cria o cluster nem as credenciais
-específicas da API/função; o workflow de provisionamento do banco segue pendente.
+A configuração atual substitui as quatro policies inline de Aurora por
+`database-rds` e `database-network`, preservando o endereço da service-linked role.
+Cada role database pode criar e administrar a instância
+`mecanica-<ambiente>-postgres`, seu subnet group e SG no próprio ambiente.
+`CreateDBInstance` exige senha mestre gerenciada pelo RDS, armazenamento
+criptografado e acesso privado. A role pode criar e etiquetar apenas secrets com
+prefixo `rds!db-` na conta/região e descrever a chave KMS; não pode ler valores,
+criar chaves nem usar `iam:PassRole`. A autorização para usar o subnet group na
+criação da instância fica em statement separado, pois `rds:StorageEncrypted` só
+é avaliado para a instância.
+
+Aplicado no backend remoto em 2026-10-05: quatro policies antigas substituídas,
+sem alterações em outros recursos. O Access Analyzer retornou zero findings para
+as quatro policies novas. A simulação das roles reais confirmou criação no próprio
+ambiente e negação no outro; negou também leitura do segredo e `iam:PassRole`.
+O plano posterior retornou `No changes`.
+
+Isso não cria a instância nem credenciais específicas da API/função.
 [Procedimento do consumidor](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados/blob/develop/docs/CONSUMO_BASE.md).
