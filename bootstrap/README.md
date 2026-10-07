@@ -167,3 +167,29 @@ apenas duas criações de policies, sem alterações ou exclusões. O plano
 aprovado foi aplicado em 2026-10-06: 2 adicionadas, 0 alteradas e 0 excluídas.
 As policies reais de hom/prd foram conferidas, a simulação da role hom no
 segredo RDS real retornou `allowed` e um novo plano mostrou `No changes`.
+
+## Credenciais PostgreSQL dos consumidores
+
+`database-api-secret.tf` permite que a pipeline do banco crie e reutilize
+`/mecanica/<ambiente>/database/api`. `database-auth-secret.tf` prepara a mesma
+operação para `/mecanica/<ambiente>/database/auth`, usada por `mecanica_auth`.
+Cada policy é vinculada somente à role database do próprio ambiente e autoriza
+CreateSecret/TagResource com as tags Project=mecanica, Environment e
+ManagedBy=database-provision, DescribeSecret no caminho exato e GetSecretValue
+com as mesmas tags do recurso. O ARN inclui conta, região e sufixo de seis
+caracteres do Secrets Manager. Não há leitura de outros ambientes, rotação,
+exclusão ou replicação de secrets nessa ampliação.
+
+A senha é gerada no runner e aplicada pelo Job SQL; não entra no estado Terraform.
+A policy da API foi aplicada em 06/10/2026. A policy de autenticação foi aplicada
+em 07/10/2026 no backend `shared/bootstrap/terraform.tfstate`, após autorização:
+2 policies criadas, nenhuma alteração/exclusão; plano posterior `No changes`.
+As policies de hom/prd foram conferidas. Simulação da role hom confirmou
+CreateSecret, TagResource, DescribeSecret e GetSecretValue no Secret auth do
+próprio ambiente e negou as quatro ações no de prd. Evidências locais ignoradas:
+`artifacts/terraform/bootstrap/database-auth-secret-2026-10-07`.
+
+O workflow do banco não aplica o bootstrap. O próximo passo é publicar as
+alterações do banco e validar `database-provision` em hom; a criação do Secret
+e do usuário PostgreSQL acontece nessa execução. A role de execução da Lambda
+receberá acesso de leitura ao Secret auth na implementação da autenticação.
