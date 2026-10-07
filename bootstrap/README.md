@@ -134,7 +134,7 @@ Cada role database pode criar e administrar a instância
 `mecanica-<ambiente>-postgres`, seu subnet group e SG no próprio ambiente.
 `CreateDBInstance` exige senha mestre gerenciada pelo RDS, armazenamento
 criptografado e acesso privado. A role pode criar e etiquetar apenas secrets com
-prefixo `rds!db-` na conta/região e descrever a chave KMS; não pode ler valores,
+prefixo `rds!db-` na conta/região e descrever a chave KMS; essa policy não lê valores,
 criar chaves nem usar `iam:PassRole`. A autorização para usar o subnet group na
 criação da instância fica em statement separado, pois `rds:StorageEncrypted` só
 é avaliado para a instância.
@@ -147,3 +147,23 @@ O plano posterior retornou `No changes`.
 
 Isso não cria a instância nem credenciais específicas da API/função.
 [Procedimento do consumidor](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados/blob/develop/docs/CONSUMO_BASE.md).
+
+## Leitura temporária para o Job SQL
+
+`database-init-secret-read.tf` acrescenta `secretsmanager:GetSecretValue` às roles
+`mecanica-hom-database-github` e `mecanica-prd-database-github`. Cada policy exige
+região `us-east-1`, segredo gerenciado pelo RDS e a tag AWS
+`aws:rds:primaryDBInstanceArn` igual ao ARN da instância PostgreSQL do próprio
+ambiente. O nome aleatório do segredo pode mudar ao recriar o banco sem ampliar
+acesso ao outro ambiente. O workflow do banco também compara o ARN do segredo
+retornado por Terraform ao da instância RDS selecionada.
+
+Esta permissão pertence ao bootstrap persistente e não é aplicada pelo workflow
+do banco. Antes de executar `database-provision/activate`, revisar e aplicar o
+plano do backend `shared/bootstrap/terraform.tfstate` com identidade
+administrativa. Sem a policy, `Initialize schema in EKS` falha em
+`GetSecretValue` antes de criar o Job. O primeiro plano de 2026-10-06 prevê
+apenas duas criações de policies, sem alterações ou exclusões. O plano
+aprovado foi aplicado em 2026-10-06: 2 adicionadas, 0 alteradas e 0 excluídas.
+As policies reais de hom/prd foram conferidas, a simulação da role hom no
+segredo RDS real retornou `allowed` e um novo plano mostrou `No changes`.

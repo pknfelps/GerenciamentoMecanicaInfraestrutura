@@ -1,6 +1,6 @@
 # A role database administra apenas a instancia PostgreSQL, o subnet group e o
 # security group do proprio ambiente. O RDS guarda a senha mestre no Secrets
-# Manager; a pipeline pode preparar esse segredo, mas nao ler seu valor.
+# Manager; a leitura temporaria para inicializacao e concedida separadamente em database-init-secret-read.tf.
 # A service-linked role ja foi criada pelo bootstrap com a descricao historica
 # abaixo. Mantemos seus atributos para evitar a substituicao de um recurso
 # compartilhado e protegido contra destroy.
