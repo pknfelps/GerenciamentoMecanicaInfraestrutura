@@ -48,7 +48,7 @@ API não acessa estado Terraform. API publica `contracts/api/` e `packages/Geren
 
 As permissões da base foram acrescentadas em [base-permissions.tf](base-permissions.tf): quatro policies gerenciadas por ambiente para EC2/EKS/IAM, anexadas somente à base; API/banco recebem DescribeCluster do ambiente. IAM/PassRole limitado às três roles EKS e policies de serviço correspondentes. Não há gerenciamento de roles OIDC pela pipeline. Access entries Kubernetes ficam na unidade da base. Aplicar estas alterações de bootstrap com identidade administrativa, seguindo [PIPELINES_BASE.md](../docs/PIPELINES_BASE.md).
 
-Essas são roles de pipeline, não de execução dos pods/Lambda. Permissões para gerenciar Aurora, Lambda, Gateway e secrets continuam junto dos respectivos componentes em E2/E3. EKS e suas roles de execução estão cobertos pela ampliação da base descrita acima. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
+Essas são roles de pipeline, não de execução dos pods/Lambda. A role database recebe permissões para RDS PostgreSQL em [database-rds-permissions.tf](database-rds-permissions.tf). Permissões de Lambda, Gateway e seus secrets continuam junto dos respectivos componentes em E2/E3. EKS e suas roles de execução estão cobertos pela ampliação da base descrita acima. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
 
 ## Estados e locking
 
@@ -108,3 +108,62 @@ Não há workflow que aplique este bootstrap automaticamente. Alterações do bo
 - [Testes com provider simulado](https://developer.hashicorp.com/terraform/language/tests/mocking).
 - [S3: exigir escrita condicional](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).
 - [AWS: claims GitHub disponíveis para condições IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#condition-keys-wif).
+
+## Consulta da base pela role do banco
+
+`database-metadata-permissions.tf` acrescenta a policy inline `database-metadata-read`
+nas roles database de hom/prd. Contém somente DescribeVpcs, DescribeSubnets,
+DescribeRouteTables e DescribeSecurityGroups, limitadas a us-east-1. Essas ações EC2
+exigem Resource `*`; o consumidor confere conta, ambiente, tags e relações dos recursos.
+Não modifica trust, acesso Kubernetes, namespace SSM nem permissões de escrita.
+
+A configuração passou nos testes simulados e foi aplicada no backend remoto existente
+em 2026-10-02: 2 policies criadas, nenhuma alteração/exclusão. O plano posterior
+retornou No changes; as policies IAM reais de hom/prd foram conferidas. Evidências
+locais ignoradas pelo Git: `artifacts/terraform/bootstrap/database-release-read-2026-10-02`.
+A configuração anterior criou `database-aurora-rds`, `database-aurora-network`
+em hom/prd e a service-linked role compartilhada `AWSServiceRoleForRDS` em
+2026-10-02 (5 criações, nenhuma alteração/exclusão). Access Analyzer não encontrou
+findings naquele plano; as simulações cobriram os recursos Aurora de cada ambiente.
+Evidência local ignorada pelo Git:
+`artifacts/terraform/bootstrap/database-aurora-iam-2026-10-02`.
+
+A configuração atual substitui as quatro policies inline de Aurora por
+`database-rds` e `database-network`, preservando o endereço da service-linked role.
+Cada role database pode criar e administrar a instância
+`mecanica-<ambiente>-postgres`, seu subnet group e SG no próprio ambiente.
+`CreateDBInstance` exige senha mestre gerenciada pelo RDS, armazenamento
+criptografado e acesso privado. A role pode criar e etiquetar apenas secrets com
+prefixo `rds!db-` na conta/região e descrever a chave KMS; essa policy não lê valores,
+criar chaves nem usar `iam:PassRole`. A autorização para usar o subnet group na
+criação da instância fica em statement separado, pois `rds:StorageEncrypted` só
+é avaliado para a instância.
+
+Aplicado no backend remoto em 2026-10-05: quatro policies antigas substituídas,
+sem alterações em outros recursos. O Access Analyzer retornou zero findings para
+as quatro policies novas. A simulação das roles reais confirmou criação no próprio
+ambiente e negação no outro; negou também leitura do segredo e `iam:PassRole`.
+O plano posterior retornou `No changes`.
+
+Isso não cria a instância nem credenciais específicas da API/função.
+[Procedimento do consumidor](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados/blob/develop/docs/CONSUMO_BASE.md).
+
+## Leitura temporária para o Job SQL
+
+`database-init-secret-read.tf` acrescenta `secretsmanager:GetSecretValue` às roles
+`mecanica-hom-database-github` e `mecanica-prd-database-github`. Cada policy exige
+região `us-east-1`, segredo gerenciado pelo RDS e a tag AWS
+`aws:rds:primaryDBInstanceArn` igual ao ARN da instância PostgreSQL do próprio
+ambiente. O nome aleatório do segredo pode mudar ao recriar o banco sem ampliar
+acesso ao outro ambiente. O workflow do banco também compara o ARN do segredo
+retornado por Terraform ao da instância RDS selecionada.
+
+Esta permissão pertence ao bootstrap persistente e não é aplicada pelo workflow
+do banco. Antes de executar `database-provision/activate`, revisar e aplicar o
+plano do backend `shared/bootstrap/terraform.tfstate` com identidade
+administrativa. Sem a policy, `Initialize schema in EKS` falha em
+`GetSecretValue` antes de criar o Job. O primeiro plano de 2026-10-06 prevê
+apenas duas criações de policies, sem alterações ou exclusões. O plano
+aprovado foi aplicado em 2026-10-06: 2 adicionadas, 0 alteradas e 0 excluídas.
+As policies reais de hom/prd foram conferidas, a simulação da role hom no
+segredo RDS real retornou `allowed` e um novo plano mostrou `No changes`.
