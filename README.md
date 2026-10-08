@@ -5,7 +5,7 @@ AWS em Terraform; Service e namespace em manifestos Kubernetes próprios. Sem wr
 | Unidade | Conteúdo |
 |---|---|
 | bootstrap | S3 estado/artefatos, ECR, OIDC e IAM persistentes |
-| terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG e SSM v2 |
+| terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
 | kubernetes | Service NodePort e namespace database-init |
 
 Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway continua unidade posterior separada.
@@ -17,6 +17,7 @@ Provisionamento/destroy somente manuais: plan salvo → aprovação hom-approval
 - [Workflows e operação](docs/PIPELINES_BASE.md)
 - [NLB interno](docs/NLB_INTERNO.md)
 - [SSM v2](docs/METADADOS_BASE.md)
+- [JWT compartilhado](docs/JWT_COMPARTILHADO.md)
 - [Migração e validação](docs/MIGRACAO_DECLARATIVA.md)
 - [Bootstrap administrativo](bootstrap/README.md)
 

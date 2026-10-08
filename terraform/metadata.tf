@@ -7,6 +7,9 @@ resource "aws_security_group" "auth" {
 
 locals {
   configuration = {
+    "jwt-secret-arn"         = aws_secretsmanager_secret.jwt.arn
+    "jwt-issuer"             = "${local.name_prefix}-auth"
+    "jwt-audience"           = "${local.name_prefix}-api"
     "vpc-id"                 = aws_vpc.main.id
     "workload-subnet-ids"    = jsonencode(aws_subnet.workload[*].id)
     "database-subnet-ids"    = jsonencode(aws_subnet.database[*].id)
