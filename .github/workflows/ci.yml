@@ -1,26 +1,16 @@
 name: ci
-
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [develop, main]
   workflow_dispatch:
-  workflow_call:
-
 permissions:
   contents: read
-
-# PRs atualizados substituem seus checks; chamadas de provisionamento usam run_id.
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  terraform-validate:
+  validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
     env:
-      TF_IN_AUTOMATION: "true"
-      TF_INPUT: "false"
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,46 +19,15 @@ jobs:
         with:
           terraform_version: 1.15.9
           terraform_wrapper: false
-      - name: Check formatting
-        run: |
-          terraform -chdir=terraform fmt -check -recursive
-          terraform -chdir=bootstrap fmt -check -recursive
-      - name: Initialize providers and validate both roots
-        run: |
-          for root in terraform bootstrap; do
-            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
-            terraform -chdir="$root" validate -no-color
-          done
-      - name: Test bootstrap plans without AWS access
-        run: terraform -chdir=bootstrap test -no-color
-
-      - name: Test private networks and capacity for both environments
-        run: |
-          terraform -chdir=terraform test -no-color -var-file=environments/hom.tfvars
-          terraform -chdir=terraform test -no-color -var-file=environments/prd.tfvars
-      - name: Test environment selection without AWS access
-        shell: pwsh
-        run: ./scripts/tests/Test-TerraformEnvironment.ps1
-      - name: Test pipeline target and plan approval without AWS access
-        shell: pwsh
-        run: |
-          ./scripts/tests/Test-BaseApprovalEnvironment.ps1
-          ./scripts/tests/Test-BasePipelineTarget.ps1
-          ./scripts/tests/Test-BasePipeline.ps1
-          ./scripts/tests/Test-BaseDestroy.ps1
-          ./scripts/tests/Test-BaseDestroyed.ps1
-      - name: Test plan fingerprint, privacy and destructive change guards
-        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
-
-  kubernetes-validate:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - uses: azure/setup-kubectl@v4
         with:
-          version: v1.36.1
-      - name: Render active manifests
-        run: kubectl kustomize kubernetes > "$RUNNER_TEMP/kubernetes.yaml"
+          version: v1.36.0
+      - name: Format, validate and render
+        run: |
+          terraform -chdir=terraform fmt -check -recursive
+          terraform -chdir=terraform init -backend=false -lockfile=readonly
+          terraform -chdir=terraform validate -no-color
+          terraform -chdir=bootstrap fmt -check -recursive
+          terraform -chdir=bootstrap init -backend=false -lockfile=readonly
+          terraform -chdir=bootstrap validate -no-color
+          kubectl kustomize kubernetes

@@ -95,16 +95,25 @@ locals {
           Resource = [for prefix in config.artifact_write : "${local.bucket_arns.artifacts}/${prefix}/*"]
         }],
         [{
-          Sid      = "ReadEnvironmentMetadata"
-          Effect   = "Allow"
-          Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
-          Resource = ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/*"]
+          Sid    = "ReadEnvironmentMetadata"
+          Effect = "Allow"
+          Action = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:ListTagsForResource"]
+          Resource = concat(
+            ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/*/v2/*"],
+            var.allow_legacy_cleanup ? [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v1/*"] : []
+          )
           }, {
           Sid      = "PublishOwnMetadata"
           Effect   = "Allow"
-          Action   = ["ssm:PutParameter", "ssm:AddTagsToResource", "ssm:DeleteParameter"]
-          Resource = [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v1/*"]
+          Action   = ["ssm:PutParameter", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:DeleteParameter"]
+          Resource = [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v2/*"]
         }],
+        var.allow_legacy_cleanup ? [{
+          Sid      = "RetireOwnLegacyMetadata"
+          Effect   = "Allow"
+          Action   = ["ssm:DeleteParameter"]
+          Resource = [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v1/*"]
+        }] : [],
         config.component != "api" ? [] : [{
           Sid      = "EcrAuthentication"
           Effect   = "Allow"
