@@ -6,24 +6,10 @@ resource "aws_iam_role_policy" "database_api_secret" {
     "Version" : "2012-10-17",
     "Statement" : [
       {
-        "Sid" : "CreateOwnCredential",
+        "Sid" : "CreateAndTagOwnCredential",
         "Effect" : "Allow",
         "Action" : [
-          "secretsmanager:CreateSecret"
-        ],
-        "Resource" : "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:/mecanica/${each.key}/database/api-??????",
-        "Condition" : {
-          "StringEquals" : {
-            "aws:RequestTag/Project" : "${var.project_name}",
-            "aws:RequestTag/Environment" : "${each.key}",
-            "aws:RequestTag/ManagedBy" : "Terraform"
-          }
-        }
-      },
-      {
-        "Sid" : "TagNewCredential",
-        "Effect" : "Allow",
-        "Action" : [
+          "secretsmanager:CreateSecret",
           "secretsmanager:TagResource"
         ],
         "Resource" : "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:/mecanica/${each.key}/database/api-??????",

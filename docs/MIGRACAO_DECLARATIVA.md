@@ -4,6 +4,8 @@ Preparação local autorizada; cada operação AWS exige plano salvo e aprovaç�
 
 ## 1. Permissões e controller legado
 
+Bootstrap administrativo aplicado em 2026-10-08 com plano salvo aprovado: 2 policies criadas, 22 atualizadas, nenhuma exclusão e conferência posterior sem mudanças. As permissões de migração estão disponíveis em hom/prd; a migração da base/banco e a limpeza de legado continuam sujeitas aos seus próprios planos aprovados.
+
 Revisar/aplicar plano do bootstrap com allow_legacy_cleanup=true. Se houver Service LoadBalancer/controller já implantados, fazer a limpeza com o mecanismo antigo ainda disponível, antes do primeiro apply novo:
 
 ```bash
