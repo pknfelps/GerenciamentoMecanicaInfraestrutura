@@ -1,4 +1,4 @@
-# O publicador SSM usa bootstrap-access existente. Esta extensão só cria o SG da função.
+# SG reservado da funcao e leitura de regras usados pelo Terraform da base.
 resource "aws_iam_role_policy" "base_metadata_network" {
   for_each = local.environments
   name     = "base-metadata-network"

@@ -1,162 +1,122 @@
 name: base-destroy
-run-name: Descarte ${{ inputs.environment }} / ${{ inputs.action }} / ${{ github.ref_name }}
+run-name: base-destroy / ${{ inputs.environment }} / ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Base a descartar: develop/hom ou main/prd; bootstrap preservado'
+        description: 'Destino: develop/hom ou main/prd'
         required: true
         default: hom
         type: choice
         options: [hom, prd]
-      action:
-        description: 'destroy: plano, aprovação e descarte; plan: somente consultar exclusões'
-        required: true
-        default: plan
-        type: choice
-        options: [plan, destroy]
 
 permissions: {}
-
-# Mesmo grupo do provisionamento, incluindo a espera pela aprovação.
 concurrency:
   group: base-${{ inputs.environment }}
   cancel-in-progress: false
 
-jobs:
-  validate:
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
+env:
+  TARGET_ENVIRONMENT: ${{ inputs.environment }}
+  AWS_REGION: us-east-1
+  AWS_PAGER: ''
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  TF_WORKSPACE: default
+  CHECKPOINT_DISABLE: '1'
 
+jobs:
   plan:
-    needs: validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
-      actions: read
       id-token: write
     outputs:
-      commit: ${{ steps.plan.outputs.commit }}
-      sha256: ${{ steps.plan.outputs.sha256 }}
-      destructive: ${{ steps.plan.outputs.destructive }}
-      has_changes: ${{ steps.plan.outputs.has_changes }}
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     defaults:
       run:
-        shell: pwsh
-    env:
-      TARGET_ENVIRONMENT: ${{ inputs.environment }}
-      CONFIGURED_REGION: ${{ vars.AWS_REGION }}
-      CONFIGURED_ROLE_ARN: ${{ vars.AWS_BASE_ROLE_ARN }}
-      CONFIGURED_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      AWS_PAGER: ''
-      TF_IN_AUTOMATION: 'true'
-      CHECKPOINT_DISABLE: 1
+        working-directory: terraform
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Validate target before AWS authentication
-        run: ./scripts/Assert-BasePipelineTarget.ps1 -Environment $env:TARGET_ENVIRONMENT -Action plan -Operation destroy
-      - name: Require a configured approval environment for destroy
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./scripts/Assert-BaseApprovalEnvironment.ps1 -Environment $env:TARGET_ENVIRONMENT
+      - name: Check branch and environment
+        run: |
+          test "$GITHUB_REF" = "refs/heads/$( [ "$TARGET_ENVIRONMENT" = hom ] && echo develop || echo main )"
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.9
           terraform_wrapper: false
-      - name: Authenticate base role with OIDC
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          aws-region: ${{ env.CONFIGURED_REGION }}
-          role-to-assume: ${{ env.CONFIGURED_ROLE_ARN }}
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_BASE_ROLE_ARN }}
           allowed-account-ids: '121754142617'
-          audience: sts.amazonaws.com
-          role-session-name: base-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          role-duration-seconds: 3600
-          unset-current-credentials: true
-          use-existing-credentials: false
-          output-credentials: false
-          translate-env-variables: false
-      - name: Plan and publish only the review summary
-        id: plan
-        run: ./scripts/Invoke-BasePipeline.ps1 -Environment $env:TARGET_ENVIRONMENT -Action plan -Operation destroy
+          role-session-name: base-plan-${{ github.run_id }}
+      - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
+      - run: terraform validate -no-color
+      - run: terraform plan -destroy -var-file="environments/$TARGET_ENVIRONMENT.tfvars" -out=tfplan -no-color -lock-timeout=60s
+      - name: Present saved plan
+        run: terraform show -no-color tfplan | tee tfplan.txt
+      - uses: actions/upload-artifact@v4
+        id: artifact
+        with:
+          name: base-destroy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            terraform/tfplan
+            terraform/tfplan.txt
+          if-no-files-found: error
+          retention-days: 7
 
   approval:
     needs: plan
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
-    name: Aprovar descarte da base
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    environment:
-      name: ${{ inputs.environment == 'prd' && 'prd-approval' || 'hom-approval' }}
-      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary
+    environment: ${{ format('{0}-approval', inputs.environment) }}
     permissions: {}
     steps:
-      # Este job não recebe OIDC, credenciais AWS, planos binários ou states.
-      - name: Record approval of this run
-        run: echo 'Descarte desta execução aprovado. O apply verificará automaticamente o mesmo commit e fingerprint.'
+      - run: echo 'Plano desta execucao aprovado pelo Environment protegido.'
 
-  destroy:
+  apply:
     needs: [plan, approval]
-    if: needs.plan.result == 'success' && needs.approval.result == 'success' && inputs.action == 'destroy'
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 60
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
       actions: read
       id-token: write
-    defaults:
-      run:
-        shell: pwsh
     env:
-      TARGET_ENVIRONMENT: ${{ inputs.environment }}
-      TARGET_ACTION: apply
-      EXPECTED_COMMIT: ${{ needs.plan.outputs.commit }}
-      APPROVED_PLAN_SHA256: ${{ needs.plan.outputs.sha256 }}
-      CONFIGURED_REGION: ${{ vars.AWS_REGION }}
-      CONFIGURED_ROLE_ARN: ${{ vars.AWS_BASE_ROLE_ARN }}
-      CONFIGURED_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      AWS_PAGER: ''
-      TF_IN_AUTOMATION: 'true'
-      CHECKPOINT_DISABLE: 1
+      KUBECONFIG: /tmp/mecanica-kubeconfig
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Validate the commit and fingerprint passed by the plan job
-        run: |
-          if (!$env:EXPECTED_COMMIT -or !$env:APPROVED_PLAN_SHA256) { throw 'Metadados do job plan ausentes; nenhum apply autorizado.' }
-          ./scripts/Assert-BasePipelineTarget.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -Operation destroy -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
-      - name: Recheck approval configuration before AWS authentication
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./scripts/Assert-BaseApprovalEnvironment.ps1 -Environment $env:TARGET_ENVIRONMENT
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.9
           terraform_wrapper: false
-      - name: Authenticate base role after approval with fresh credentials
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          aws-region: ${{ env.CONFIGURED_REGION }}
-          role-to-assume: ${{ env.CONFIGURED_ROLE_ARN }}
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_BASE_ROLE_ARN }}
           allowed-account-ids: '121754142617'
-          audience: sts.amazonaws.com
-          role-session-name: base-destroy-${{ github.run_id }}-${{ github.run_attempt }}
-          role-duration-seconds: 3600
-          unset-current-credentials: true
-          use-existing-credentials: false
-          output-credentials: false
-          translate-env-variables: false
-      - name: Replan, compare, destroy and verify the selected base
-        run: ./scripts/Invoke-BasePipeline.ps1 -Environment $env:TARGET_ENVIRONMENT -Action $env:TARGET_ACTION -Operation destroy -ExpectedCommit $env:EXPECTED_COMMIT -ApprovedPlanSha256 $env:APPROVED_PLAN_SHA256
+          role-session-name: base-apply-${{ github.run_id }}
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          path: terraform
+          merge-multiple: true
+      - run: terraform -chdir=terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.0
+      - name: Configure Kubernetes access
+        run: aws eks update-kubeconfig --region us-east-1 --name "mecanica-$TARGET_ENVIRONMENT-eks"
+      - name: Remove base Kubernetes manifests
+        run: kubectl delete -k kubernetes --ignore-not-found=true --wait=true
+      - name: Apply approved plan
+        run: terraform -chdir=terraform apply -no-color -lock-timeout=60s tfplan

@@ -1,5 +1,4 @@
-# Queries used by the database-release consumer. EC2 Describe APIs below do not
-# support resource-level permissions; environment ownership is checked by the consumer.
+# Leitura regional de rede para o Terraform do banco. APIs Describe nao permitem escopo por recurso.
 resource "aws_iam_role_policy" "database_metadata_read" {
   for_each = local.environments
   name     = "database-metadata-read"
@@ -7,7 +6,7 @@ resource "aws_iam_role_policy" "database_metadata_read" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid    = "VerifyBaseNetwork"
+      Sid    = "ReadDatabaseNetwork"
       Effect = "Allow"
       Action = [
         "ec2:DescribeVpcs",
