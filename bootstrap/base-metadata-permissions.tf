@@ -1,4 +1,4 @@
-# SG reservado da funcao e leitura de regras usados pelo Terraform da base.
+# SG reservado da funcao e leitura regional de metadados de rede/SSM pelo Terraform da base.
 resource "aws_iam_role_policy" "base_metadata_network" {
   for_each = local.environments
   name     = "base-metadata-network"
@@ -7,9 +7,9 @@ resource "aws_iam_role_policy" "base_metadata_network" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "ReadSecurityGroupRules"
+        Sid       = "ReadRegionalMetadata"
         Effect    = "Allow"
-        Action    = ["ec2:DescribeSecurityGroupRules"]
+        Action    = ["ec2:DescribeSecurityGroupRules", "ssm:DescribeParameters"]
         Resource  = "*"
         Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } }
       },
