@@ -18,6 +18,7 @@ Provisionamento/destroy somente manuais: plan salvo → aprovação hom-approval
 - [NLB interno](docs/NLB_INTERNO.md)
 - [SSM v2](docs/METADADOS_BASE.md)
 - [JWT compartilhado](docs/JWT_COMPARTILHADO.md)
+- [Permissões do runtime da API](docs/API_RUNTIME.md)
 - [Migração e validação](docs/MIGRACAO_DECLARATIVA.md)
 - [Bootstrap administrativo](bootstrap/README.md)
 
