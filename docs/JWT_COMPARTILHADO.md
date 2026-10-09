@@ -2,7 +2,7 @@
 
 ## Recursos e contrato
 
-Implementação da infraestrutura preparada em 2026-10-08; aplicação do bootstrap/base e validação AWS pendentes. E2.12 continua aberta até integração da função e compatibilidade com a API.
+Implementação da infraestrutura preparada em 2026-10-08. Bootstrap aplicado com plano salvo aprovado: 4 criações, nenhuma alteração/exclusão; conferência posterior No changes e simulação IAM confirmaram metadados permitidos sem leitura da chave pela base. Base hom aplicada pelo workflow e conferida em 2026-10-08: Secret/AWSCURRENT, SSM, confiança e associação Pod Identity corretos, agente ACTIVE, simulação IAM isolada e plano No changes sem rotação. A chave não foi lida. Consumo dos runtimes e provisionamento/validação prd permanecem pendentes. E2.12 continua aberta até integração da função e compatibilidade com a API.
 
 A base administra o Secret /mecanica/<ambiente>/base/jwt e publica os parâmetros String /mecanica/<ambiente>/base/v2/jwt-secret-arn, jwt-issuer e jwt-audience. Hom usa issuer mecanica-hom-auth e audience mecanica-hom-api; prd usa mecanica-prd-auth e mecanica-prd-api. Issuer é um identificador lógico, sem exigir um endpoint OIDC. Algoritmo HS256, expiração de dez minutos, claims e tolerância de relógio permanecem definidos no contrato de autenticação.
 
@@ -12,13 +12,13 @@ Não habilitar rotação automática. Uma futura rotação exige plano e operaç
 
 ## Identidade da API e consumo posterior
 
-A role mecanica-<ambiente>-api-runtime lê somente o Secret JWT exato e os três parâmetros JWT do seu ambiente. A confiança exige pods.eks.amazonaws.com, sts:AssumeRole/sts:TagSession e tags de cluster ARN, namespace default e ServiceAccount gerenciamento-api. A base administra a associação EKS Pod Identity; o agente já existe.
+A policy read-jwt da role mecanica-<ambiente>-api-runtime lê somente o Secret JWT exato e os três parâmetros JWT do seu ambiente. A E2.6 acrescenta a policy Terraform read-database para os seis parâmetros públicos database/v2 e o Secret database/api do mesmo ambiente; a implementação está preparada e o apply depende de plano salvo aprovado. A confiança exige pods.eks.amazonaws.com, sts:AssumeRole/sts:TagSession e tags de cluster ARN, namespace default e ServiceAccount gerenciamento-api. A base administra a associação EKS Pod Identity; o agente já existe.
 
-O ServiceAccount e serviceAccountName do Deployment serão criados pelo repositório da API na etapa de integração. A associação pode existir antes desses manifestos. Esta entrega não modifica o Deployment, o Secret db-secrets nem a configuração local da API.
+O repositório da API implementa o ServiceAccount e serviceAccountName nos overlays hom/prd, com configuração runtime pelo SDK .NET. A associação existe antes desses manifestos. Sua aplicação exige primeiro o apply aprovado da policy do banco e a publicação da imagem ECR com digest; a tag provisória pending não deve ser aplicada. O modo local mantém db-secrets.
 
 Na integração, API e função carregarão issuer/audience/ARN e a versão AWSCURRENT na inicialização usando SDK .NET, com credenciais de suas roles. Preencher Jwt:Key, Jwt:Issuer e Jwt:Audience, manter a chave em memória e não consultar AWS a cada requisição. Falha de leitura, JSON inválido, campo key ausente/curto ou issuer/audience vazios impedem a inicialização, sem fallback para a chave local. Não copiar a chave para Kubernetes, CI, imagem ou arquivo gerado.
 
-A role de execução Lambda será provisionada pelo repositório de autenticação em sua etapa própria. Ela receberá leitura do JWT do ambiente; não há role provisória nesta entrega. A role da API ainda não recebe acesso ao Secret de banco: isso pertence à E2.6. As pipelines API/auth não precisam ler a chave.
+A role de execução Lambda será provisionada pelo repositório de autenticação em sua etapa própria. Ela receberá leitura do JWT do ambiente; não há role provisória nesta entrega. A role da API receberá somente o Secret database/api e os seis parâmetros previstos após aprovação/apply da policy E2.6; não recebe auth, Secret administrativo RDS nem outro ambiente. As pipelines API/auth não precisam ler a chave.
 
 ## Provisionamento e aprovação
 
