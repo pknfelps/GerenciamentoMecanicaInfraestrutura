@@ -4,7 +4,7 @@ AWS em Terraform; Service e namespace em manifestos Kubernetes próprios. Sem wr
 
 | Unidade | Conteúdo |
 |---|---|
-| bootstrap | S3 estado/artefatos, ECR, OIDC e IAM persistentes |
+| bootstrap | S3 estado/artefatos, ECR, OIDC, role/policy persistente auth-runtime e permissões das pipelines |
 | terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
 | kubernetes | Service NodePort e namespace database-init |
 
