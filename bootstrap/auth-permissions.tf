@@ -9,6 +9,7 @@ locals {
         Action = [
           "lambda:CreateFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration",
           "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction",
+          "lambda:CreateAlias", "lambda:GetAlias", "lambda:UpdateAlias", "lambda:DeleteAlias", "lambda:ListAliases",
           "lambda:PublishVersion", "lambda:ListVersionsByFunction", "lambda:GetFunctionConcurrency",
           "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency", "lambda:InvokeFunction",
           "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags",
@@ -61,7 +62,7 @@ locals {
         Effect = "Allow"
         Action = ["s3:GetObjectVersion"]
         Resource = [
-          "${local.bucket_arns.artifacts}/lambda/*",
+          "${local.bucket_arns.artifacts}/sam/auth/${environment}/*",
           "${local.bucket_arns.artifacts}/contracts/auth/*"
         ]
       },
@@ -78,37 +79,6 @@ locals {
           "ec2:ResourceTag/Environment" = environment
           "ec2:ResourceTag/ManagedBy"   = "Terraform"
           "ec2:ResourceTag/Name"        = "${var.project_name}-${environment}-auth"
-        } }
-      },
-      {
-        Sid      = "CreateTaggedEgressRule"
-        Effect   = "Allow"
-        Action   = ["ec2:AuthorizeSecurityGroupEgress"]
-        Resource = "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"
-        Condition = { StringEquals = {
-          "aws:RequestTag/Project"     = var.project_name
-          "aws:RequestTag/Environment" = environment
-          "aws:RequestTag/ManagedBy"   = "Terraform"
-          "aws:RequestTag/Component"   = "auth"
-        } }
-      },
-      {
-        Sid       = "TagEgressRuleOnCreation"
-        Effect    = "Allow"
-        Action    = ["ec2:CreateTags"]
-        Resource  = "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"
-        Condition = { StringEquals = { "ec2:CreateAction" = "AuthorizeSecurityGroupEgress" } }
-      },
-      {
-        Sid      = "ManageOwnedRuleTags"
-        Effect   = "Allow"
-        Action   = ["ec2:CreateTags", "ec2:DeleteTags", "ec2:ModifySecurityGroupRules"]
-        Resource = "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"
-        Condition = { StringEquals = {
-          "ec2:ResourceTag/Project"     = var.project_name
-          "ec2:ResourceTag/Environment" = environment
-          "ec2:ResourceTag/ManagedBy"   = "Terraform"
-          "ec2:ResourceTag/Component"   = "auth"
         } }
       }
     ]

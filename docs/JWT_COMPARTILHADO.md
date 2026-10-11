@@ -18,7 +18,7 @@ O repositório da API implementa o ServiceAccount e serviceAccountName nos overl
 
 Na integração, API e função carregarão issuer/audience/ARN e a versão AWSCURRENT na inicialização usando SDK .NET, com credenciais de suas roles. Preencher Jwt:Key, Jwt:Issuer e Jwt:Audience, manter a chave em memória e não consultar AWS a cada requisição. Falha de leitura, JSON inválido, campo key ausente/curto ou issuer/audience vazios impedem a inicialização, sem fallback para a chave local. Não copiar a chave para Kubernetes, CI, imagem ou arquivo gerado.
 
-A role de execução Lambda será provisionada pelo repositório de autenticação em sua etapa própria. Ela receberá leitura do JWT do ambiente; não há role provisória nesta entrega. A role da API receberá somente o Secret database/api e os seis parâmetros previstos após aprovação/apply da policy E2.6; não recebe auth, Secret administrativo RDS nem outro ambiente. As pipelines API/auth não precisam ler a chave.
+IAM runtime Lambda pertence ao bootstrap Terraform persistente, aplicado para hom/prd em 2026-10-09. Permite AWSCURRENT do JWT/database-auth e nove parâmetros públicos do carregador. Template SAM reutiliza essa role e não a exclui no descarte ([ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md)). SAM/workflows implementados localmente; novo bootstrap e deploy pendentes. Migração não altera SDK .NET, claims ou consumo JWT. API usa somente database/api e campos previstos, sem auth, administrativo RDS ou outro ambiente. Pipelines não leem chave JWT.
 
 ## Provisionamento e aprovação
 

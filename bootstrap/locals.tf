@@ -42,9 +42,9 @@ locals {
     }
     auth = {
       repositories   = ["auth"]
-      state_unit     = "auth"
-      artifact_read  = ["contracts/auth", "lambda", "packages/GerenciamentoMecanica.Auth.Contracts"]
-      artifact_write = ["contracts/auth", "lambda"]
+      state_unit     = null
+      artifact_read  = ["contracts/auth"]
+      artifact_write = ["contracts/auth"]
       metadata_write = ["auth"]
     }
   }
