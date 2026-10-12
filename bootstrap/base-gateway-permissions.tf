@@ -72,6 +72,22 @@ resource "aws_iam_role_policy" "base_gateway_network" {
         }
       },
       {
+        "Sid" : "CreateTaggedGatewayEgressRule",
+        "Effect" : "Allow",
+        "Action" : [
+          "ec2:AuthorizeSecurityGroupEgress"
+        ],
+        "Resource" : "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*",
+        "Condition" : {
+          "StringEquals" : {
+            "aws:RequestTag/Project" : "${var.project_name}",
+            "aws:RequestTag/Environment" : "${each.key}",
+            "aws:RequestTag/Component" : "gateway-network",
+            "aws:RequestTag/ManagedBy" : "Terraform"
+          }
+        }
+      },
+      {
         "Sid" : "TagNewGatewayEgressRule",
         "Effect" : "Allow",
         "Action" : [

@@ -4,20 +4,31 @@ locals {
   http_methods  = toset(["get", "post", "put", "patch", "delete", "head", "options"])
   private_paths = toset(["/health/live", "/health/startup", "/health/ready"])
 
+  # REST API allows only one variable child per parent. Share the gateway path
+  # across methods and keep each backend's original parameter name in the mapping.
+  api_gateway_paths = {
+    for path in keys(local.api_contract.paths) : path => join("/", [
+      for index, segment in split("/", path) :
+      can(regex("^\\{[^{}]+\\}$", segment)) ? "{path${index}}" : segment
+    ])
+  }
+
   api_operations = flatten([
     for path, item in local.api_contract.paths : [
       for method, operation in item : {
-        key       = "${upper(method)} ${path}"
-        path      = path
-        method    = method
-        operation = operation
+        key          = "${upper(method)} ${local.api_gateway_paths[path]}"
+        path         = local.api_gateway_paths[path]
+        backend_path = path
+        method       = method
+        operation    = operation
         # Path declarations are sufficient for proxy routing; query/header/body pass through.
-        parameters = [for name in regexall("\\{([^{}]+)\\}", path) : {
-          name     = name[0]
-          in       = "path"
-          required = true
-          schema   = { type = "string" }
-        }]
+        parameters = [for index, segment in split("/", path) : {
+          name         = "path${index}"
+          backend_name = substr(segment, 1, length(segment) - 2)
+          in           = "path"
+          required     = true
+          schema       = { type = "string" }
+        } if can(regex("^\\{[^{}]+\\}$", segment))]
       } if contains(local.http_methods, method)
     ] if !contains(local.private_paths, path)
   ])
@@ -36,15 +47,20 @@ locals {
   api_paths = {
     for path in distinct([for route in local.api_operations : route.path]) : path => {
       for route in local.api_operations : route.method => {
-        parameters = route.parameters
-        security   = []
+        parameters = [for parameter in route.parameters : {
+          name     = parameter.name
+          in       = parameter.in
+          required = parameter.required
+          schema   = parameter.schema
+        }]
+        security = []
         responses = { for status, response in route.operation.responses : status => {
           description = try(response.description, "Resposta do backend")
         } }
         "x-amazon-apigateway-integration" = {
           type                = "http_proxy"
           httpMethod          = upper(route.method)
-          uri                 = "${local.base["api-integration-uri"]}${route.path}"
+          uri                 = "${local.base["api-integration-uri"]}${route.backend_path}"
           connectionType      = "VPC_LINK"
           connectionId        = "$${stageVariables.vpcLinkId}"
           integrationTarget   = local.base["nlb-arn"]
@@ -52,7 +68,7 @@ locals {
           timeoutInMillis     = 29000
           requestParameters = {
             for parameter in route.parameters :
-            "integration.request.path.${parameter.name}" => "method.request.path.${parameter.name}"
+            "integration.request.path.${parameter.backend_name}" => "method.request.path.${parameter.name}"
           }
         }
       } if route.path == path

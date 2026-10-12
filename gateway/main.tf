@@ -45,6 +45,7 @@ resource "aws_api_gateway_rest_api" "gateway" {
     precondition {
       condition = (
         length(local.api_operations) > 0 &&
+        length(distinct([for route in local.api_operations : route.key])) == length(local.api_operations) &&
         length(local.auth_operations) == 1 &&
         alltrue([for route in local.auth_operations : route.key == "POST /customers/validate"]) &&
         length(setintersection(toset([for route in local.api_operations : route.key]), toset([for route in local.auth_operations : route.key]))) == 0 &&

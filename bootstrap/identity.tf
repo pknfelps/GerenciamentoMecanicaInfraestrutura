@@ -97,9 +97,15 @@ locals {
         [{
           Sid    = "ReadEnvironmentMetadata"
           Effect = "Allow"
-          Action = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:ListTagsForResource"]
+          Action = config.component == "gateway" ? ["ssm:GetParameter", "ssm:GetParameters", "ssm:ListTagsForResource"] : [
+            "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:ListTagsForResource"
+          ]
           Resource = concat(
-            ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/*/v2/*"],
+            config.component == "gateway" ? flatten([
+              for component, fields in local.gateway_metadata_read_fields : [
+                for field in fields : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v2/${field}"
+              ]
+            ]) : ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/*/v2/*"],
             var.allow_legacy_cleanup ? [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v1/*"] : []
           )
           }, {
