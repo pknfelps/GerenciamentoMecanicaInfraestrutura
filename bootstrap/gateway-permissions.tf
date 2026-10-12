@@ -67,6 +67,14 @@ locals {
         "Resource" : "arn:aws:apigateway:${var.aws_region}::/restapis/*"
       },
       {
+        "Sid" : "ReadRegionalVpcLinkMetadata",
+        "Effect" : "Allow",
+        # Deletion removes resource tags before the final GetVpcLink/NotFound.
+        # Terraform must be able to wait and refresh without those tags.
+        "Action" : "apigateway:GET",
+        "Resource" : "arn:aws:apigateway:${var.aws_region}::/vpclinks/*"
+      },
+      {
         "Sid" : "ManageEnvironmentGatewayResources",
         "Effect" : "Allow",
         "Action" : "apigateway:*",
@@ -166,6 +174,18 @@ locals {
           "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/${var.project_name}-${environment}-gateway",
           "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/${var.project_name}-${environment}-gateway:*"
         ]
+      },
+      {
+        "Sid" : "ReadRegionalParameterMetadata",
+        "Effect" : "Allow",
+        # DescribeParameters has no resource-level scope and returns metadata only.
+        "Action" : "ssm:DescribeParameters",
+        "Resource" : "*",
+        "Condition" : {
+          "StringEquals" : {
+            "aws:RequestedRegion" : "${var.aws_region}"
+          }
+        }
       },
       {
         "Sid" : "LocateRegionalLogGroups",

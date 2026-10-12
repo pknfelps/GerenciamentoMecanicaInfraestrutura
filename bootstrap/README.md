@@ -128,3 +128,27 @@ Recuperação autorizada pelo mantenedor e aplicada localmente com o perfil admi
 Validação: Terraform fmt/validate aprovados, Access Analyzer sem findings, planos posteriores do bootstrap e Gateway No changes. HTTPS POST /customers/validate com documento inválido retornou 400; GET /Catalog sem token retornou 401, comprovando as duas integrações. Todas as rotas implantadas e os mapeamentos de Catalog foram conferidos. O plano destroy foi gerado com sucesso, mas não foi aplicado; a execução com OIDC pelo workflow ainda deve ser conferida pelo mantenedor.
 
 Evidências em artifacts/gateway-recovery. Publicar as alterações Terraform antes do próximo gateway-provision; o código anterior ainda possui o conflito de rotas. Iniciar nova execução e revisar seu plano, sem reutilizar planos anteriores à recuperação. A validação de autenticação completa/JWT permanece na etapa funcional correspondente.
+
+## Metadados SSM do Gateway — 12/10/2026
+
+O gateway-destroy falhou no plan ao atualizar os sete recursos aws_ssm_parameter.configuration: faltava ssm:DescribeParameters. O provider AWS 6.58.0 usa GetParameter, DescribeParameters e ListTagsForResource na leitura do recurso; a conferência administrativa local anterior não demonstrava as permissões OIDC do workflow.
+
+A policy Gateway hom/prd agora possui ReadRegionalParameterMetadata: somente ssm:DescribeParameters com Resource="*" e aws:RequestedRegion=us-east-1. A ação não oferece escopo por ARN e retorna metadados, sem valores. Ela pode descrever metadados de parâmetros de outros componentes/ambientes da conta; GetParameter/GetParameters, escrita e exclusão preservam os nomes/prefixos já autorizados.
+
+Plano salvo aplicado dentro da autorização de recuperação do mantenedor: zero criações, duas alterações das policies Gateway e zero exclusões. Policies v6 conferidas; simulate-principal-policy das roles hom/prd retornou allowed para DescribeParameters em us-east-1. Simulações da proposta negaram us-west-2, Access Analyzer não retornou findings e o plano posterior do bootstrap mostrou No changes. Nenhum destroy Gateway foi executado nesta correção.
+
+Evidências em artifacts/bootstrap-gateway-ssm-metadata. Iniciar uma nova execução gateway-destroy para gerar/revisar o plano e validar o fluxo com OIDC. A correção IAM já está aplicada na AWS; versionar gateway-permissions.tf e estes registros para preservar a declaração do bootstrap. Não é necessário alterar o workflow.
+
+Referências: [ações SSM](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ssm.html) e [provider 6.58.0](https://github.com/hashicorp/terraform-provider-aws/blob/v6.58.0/internal/service/ssm/parameter.go).
+
+## Leitura do VPC Link durante o descarte — 12/10/2026
+
+O destroy pelo workflow removeu SSM, stage, deployment, logs, permissão Lambda e API REST. DeleteVpcLink também foi aceito, mas a espera final GetVpcLink recebeu AccessDenied porque a leitura ainda dependia de ResourceTag. A consulta administrativa posterior retornou NotFound; o recurso já havia desaparecido e somente sua referência permanecia no estado Terraform.
+
+A policy Gateway hom/prd acrescenta ReadRegionalVpcLinkMetadata, permitindo somente apigateway:GET em arn:aws:apigateway:us-east-1::/vpclinks/* sem exigir tags. Assim o provider consegue aguardar exclusão e receber NotFound. A leitura pode inspecionar metadados de VPC Links do outro ambiente na mesma região; escrita e exclusão mantêm as condições existentes. A exceção corresponde à leitura já adotada para APIs REST e não exige alterar workflows.
+
+Plano salvo do bootstrap aplicado dentro da autorização de recuperação AWS: zero criações, duas alterações IAM e zero exclusões. Demais statements preservados. Terraform fmt/validate e Access Analyzer aprovados; simulações hom/prd autorizaram GET sem tags em us-east-1 e negaram us-west-2. A simulação das roles reais após o apply retornou allowed; o plano posterior do bootstrap mostrou No changes.
+
+A reconciliação foi feita por plan -destroy salvo e apply do mesmo plano, sem state rm, edição manual ou alterações reais: 0 added, 0 changed, 0 destroyed. Estado final sem recursos managed; EC2 sem interfaces de rede associadas ao SG sg-0a0169a0068e6f502. O descarte do Gateway hom está concluído. O workflow ainda pode ser executado novamente para registrar sucesso no GitHub, usando novo plano; não reutilizar o plano que falhou.
+
+Evidências em artifacts/bootstrap-gateway-vpc-link-read. Versionar a correção no bootstrap e estes registros. [Provider AWS 6.58.0: leitura e espera de exclusão](https://github.com/hashicorp/terraform-provider-aws/blob/v6.58.0/internal/service/apigatewayv2/vpc_link.go).
