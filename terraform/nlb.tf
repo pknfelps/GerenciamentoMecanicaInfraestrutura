@@ -2,12 +2,19 @@ locals {
   nlb_name = "${local.name_prefix}-api"
 }
 
-# Sem entrada direta. O Gateway utiliza PrivateLink/VPC Link REST (D01).
+# VPC Link V2: entrada TCP 80 exclusiva do SG reservado do Gateway.
 resource "aws_security_group" "nlb" {
   name        = "${local.name_prefix}-nlb"
   description = "NLB interno da API; entrada somente por PrivateLink"
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.name_prefix}-nlb" }
+  ingress {
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.gateway.id]
+    description     = "VPC Link V2 do Gateway do proprio ambiente"
+  }
   egress {
     from_port       = 30080
     to_port         = 30080
@@ -35,7 +42,7 @@ resource "aws_lb" "api" {
   security_groups    = [aws_security_group.nlb.id]
 
   enable_cross_zone_load_balancing                             = true
-  enforce_security_group_inbound_rules_on_private_link_traffic = "off"
+  enforce_security_group_inbound_rules_on_private_link_traffic = "on"
   tags                                                         = { Name = local.nlb_name }
 }
 

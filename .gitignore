@@ -40,3 +40,10 @@ bootstrap/backend.hcl
 # Plano salvo gerado localmente (artefato de workflow, nunca fonte).
 /terraform/tfplan
 /terraform/tfplan.txt
+
+# Gateway: entradas publicas baixadas e planos da execucao.
+!/gateway/environments/hom.tfvars
+!/gateway/environments/prd.tfvars
+/gateway/.inputs/
+/gateway/tfplan
+/gateway/tfplan.txt

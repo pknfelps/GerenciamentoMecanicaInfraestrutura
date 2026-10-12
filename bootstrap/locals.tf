@@ -19,11 +19,11 @@ locals {
       metadata_write = ["base"]
     }
     gateway = {
-      # Reusable workflows executam no contexto do chamador (API/auth/infra).
-      repositories   = ["infra", "api", "auth"]
+      # Gateway utiliza workflows manuais exclusivos do repositorio de infraestrutura.
+      repositories   = ["infra"]
       state_unit     = "gateway"
       artifact_read  = ["contracts/api", "contracts/auth"]
-      artifact_write = ["contracts/gateway"]
+      artifact_write = []
       metadata_write = ["gateway"]
     }
     database = {

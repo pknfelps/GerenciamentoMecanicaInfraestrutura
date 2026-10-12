@@ -13,3 +13,7 @@ Não há plan depois da aprovação. Estado alterado invalida o plano pelo Terra
 base-destroy executa plan -destroy salvo, approval e apply; antes do apply configura kubeconfig isolado e remove os manifestos Kubernetes. Consumidores e banco já devem estar descartados, inclusive ConfigMap/Secrets/Job do namespace reservado. Se o EKS já foi removido fora deste fluxo, não ignore a falha: revise o estado/configuração e prepare um procedimento de recuperação explicitamente aprovado.
 
 CI de PR/push é somente fmt/validate/Kustomize; não provisiona. aws-oidc-check é diagnóstico manual STS, sem escrever evidência SSM. [Migração](MIGRACAO_DECLARATIVA.md) deve preceder a primeira execução nova; não usar destroy para testar.
+
+## Workflows Gateway
+
+Gateway fica separado da base: gateway-provision/gateway-destroy manuais, com environment, api_commit e auth_commit. Develop/hom ou main/prd, role AWS_GATEWAY_ROLE_ARN existente, três jobs plan → aprovação → apply. Os contratos verificados acompanham o plano salvo no mesmo artefato (sete dias); apply usa o mesmo SHA e artefato por ID, sem replan ou novo download S3. A fila gateway por ambiente cobre provisionamento/descarte; o mantenedor serializa mudanças entre componentes. CI também valida a unidade gateway. [Entradas, sequência e descarte](GATEWAY.md).
