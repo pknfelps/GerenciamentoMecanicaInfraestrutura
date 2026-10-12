@@ -56,7 +56,6 @@ output "github_environment_variables" {
       auth = {
         AWS_REGION       = var.aws_region
         AWS_ROLE_ARN     = aws_iam_role.pipeline["${environment}-auth"].arn
-        TF_STATE_BUCKET  = local.buckets.state
         ARTIFACTS_BUCKET = local.buckets.artifacts
       }
     }

@@ -59,7 +59,8 @@ resource "aws_s3_bucket_policy" "shared" {
       Effect    = "Deny"
       Principal = "*"
       Action    = "s3:PutObject"
-      Resource  = "${local.bucket_arns.artifacts}/*"
+      # Upload nativo SAM nao envia If-None-Match. Excecao somente nestes prefixos.
+      NotResource = [for environment in local.environments : "${local.bucket_arns.artifacts}/sam/auth/${environment}/*"]
       Condition = {
         Null = { "s3:if-none-match" = "true" }
         Bool = { "s3:ObjectCreationOperation" = "true" }
