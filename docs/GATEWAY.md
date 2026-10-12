@@ -56,3 +56,7 @@ aws ec2 describe-network-interfaces --filters "Name=group-id,Values=$gateway_sg"
 ```
 
 Não executar destroy para testar esta entrega. Referências: [VPC Link V2 REST](https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-private-integration.html), [limites do importador](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-known-issues.html) e [logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-logging.html).
+
+## Configuração regional de logs — conferência AWS de 12/10/2026
+
+O API Gateway valida sua role regional tentando escrever no grupo técnico /aws/apigateway/welcome. A policy da role permite esse grupo/streams além dos dois grupos de acesso do projeto; não permite outros grupos. A primeira aplicação concluiu nove criações/quatro alterações IAM, mas falhou nessa validação. Correção mínima aprovada e aplicada pelo plano complementar: uma criação/uma alteração/zero exclusões. GetAccount confirmou a role mecanica-apigateway-logs e o plano posterior do bootstrap retornou No changes. Evidências em artifacts/bootstrap-gateway/welcome-apply.log, post-welcome-account.json e post-welcome-plan.txt. O provisionamento Gateway e a validação HTTP/JWT continuam pendentes. Não reutilizar o plano original, pois o estado já mudou.

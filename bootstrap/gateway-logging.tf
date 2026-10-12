@@ -23,7 +23,7 @@ resource "aws_iam_role_policy" "api_gateway_logs" {
     "Version" : "2012-10-17",
     "Statement" : [
       {
-        "Sid" : "PushOwnGatewayAccessLogs",
+        "Sid" : "GatewayAccessAndValidationLogs",
         "Effect" : "Allow",
         "Action" : [
           "logs:CreateLogGroup",
@@ -34,6 +34,9 @@ resource "aws_iam_role_policy" "api_gateway_logs" {
           "logs:FilterLogEvents"
         ],
         "Resource" : [
+          # API Gateway validates the regional role by writing to this technical log group.
+          "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/welcome",
+          "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/welcome:*",
           "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/${var.project_name}-hom-gateway",
           "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/${var.project_name}-prd-gateway",
           "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/apigateway/${var.project_name}-hom-gateway:*",
