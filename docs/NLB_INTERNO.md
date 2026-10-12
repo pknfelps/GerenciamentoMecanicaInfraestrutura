@@ -4,7 +4,7 @@
 
 `kubernetes/svc-gerenciamento-api.yaml`: NodePort, namespace default, selector app=gerenciamento-api, port 80, nodePort 30080, targetPort 8080, externalTrafficPolicy Cluster. Kube-proxy encaminha ao Pod disponível. Health check HTTP `/health/ready` na porta 30080, sucesso 200. Antes do deploy da API, targets podem estar unhealthy sem impedir o provisionamento da base.
 
-SG NLB sem ingresso direto; egress TCP 30080 ao SG EKS, que aceita essa porta somente do SG NLB. REST VPC Link/PrivateLink recebe avaliação inbound off. Não abrir CIDR da VPC nem internet para contornar teste; a validação de tráfego pelo Gateway ocorre na integração posterior.
+SG NLB aceita TCP 80 somente do SG reservado mecanica-<ambiente>-gateway; egress TCP 30080 ao SG EKS, que aceita essa porta somente do SG NLB. O VPC Link V2 usa interfaces nesse SG reservado. A avaliação inbound PrivateLink passa a on, substituindo a exceção off do desenho V1 anterior. A descrição histórica do SG NLB foi preservada para evitar substituição do recurso. Não abrir CIDR da VPC nem internet. [Provisionamento e validação Gateway](GATEWAY.md).
 
 SSM base/v2 publica ARN/DNS/SG/target group/porta/protocolo/URI. Terraform é o único proprietário AWS; não usar Service LoadBalancer, Helm ou controller na operação normal. Antes da migração, seguir [limpeza legada](MIGRACAO_DECLARATIVA.md).
 

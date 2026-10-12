@@ -70,3 +70,11 @@ Plano CI anterior em artifacts/bootstrap-auth-ci (duas criações, hash A08A3808
 - Quota total/não reservada anteriormente conferida: 10; reserva cinco requer mínimo 105 sem outras reservas. Pedido 110 pendente; não reduzir automaticamente a reserva.
 
 Plano aprovado pelo mantenedor e aplicado exatamente pelo binário acima: 6 recursos criados, 5 alterados, nenhum removido. Terraform pós-apply retornou No changes. Policies/associações SAM, trust/policy CI e policy/versionamento do bucket conferidos na AWS. Evidências apply.txt, post-apply-plan.txt e deployed-*.json no mesmo diretório. Não reaplicar o binário consumido. A aplicação não cria a Lambda nem recria base/banco. Próximo: quota suficiente → base/banco/Job → publicação → sam deploy manual → hom. Publicação, implantação e destroy ficam a cargo do mantenedor. auth-provision/auth-destroy executam completos após disparo manual, sem job de aprovação; bootstrap Terraform mantém plano aprovado.
+
+## Gateway REST — 12/10/2026
+
+O bootstrap mantém a service-linked role API Gateway (ops.apigateway.amazonaws.com), a role mecanica-apigateway-logs e a configuração regional de CloudWatch. São persistentes; o estado Gateway administra apenas seus log groups. A policy de logs é limitada aos dois grupos /aws/apigateway/mecanica-<ambiente>-gateway, com inspeção regional de grupos.
+
+Gateway possui uma policy gerenciada por ambiente em gateway-permissions.tf: criação com nome/tags exigidos, gerenciamento de API/VPC Link pelos tags do ambiente, logs próprios, rede somente inspeção e AddPermission apenas para apigateway.amazonaws.com na versão auth própria. Não concede leitura de Secrets, modificação da Lambda ou administração de outro ambiente. A confiança OIDC aceita somente o repositório infra; contracts/api e contracts/auth são somente leitura. Policies inline base-gateway-permissions.tf permitem criar/administrar o SG reservado, sua saída e o ingresso NLB, sem abertura de CIDRs.
+
+Plano adicional em artifacts/bootstrap-gateway/bootstrap-gateway.tfplan: 10 criações, 4 alterações, nenhuma exclusão/substituição; tfplan.txt e REVISAO.md disponíveis para revisão. Não aplicado. Aplicar apenas o binário aprovado, sem novo plan. [Sequência e operação](../docs/GATEWAY.md).

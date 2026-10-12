@@ -57,3 +57,7 @@ Conferir que esses planos mostram apenas adoção/retirada pretendida; no banco 
 fmt/validate e renderização Kustomize cobrem sintaxe. Plano remoto comprova preservação/migração. Workflows devem aguardar required reviewer e aplicar artefato daquele run, sem novo plan. Conferir no console Secrets temporários removidos e estados sem secret_string/data comuns com valores; não anexar estados/logs sensíveis como evidência. Depois do deploy API, targets healthy e /health/ready 200 pelo caminho privado/Gateway. Descarte só no ciclo solicitado: consumidores → banco → base; backend/bootstrap e outro ambiente permanecem.
 
 Não há novos scripts de teste ou descarte de validação. Validação remota da reformulação permanece pendente até o mantenedor aprovar e executar os planos.
+
+## Entrada pública — Gateway V2
+
+Não há Gateway/VPC Link anterior a adotar. Criar a unidade gateway após bootstrap e backends. A base acrescenta SG reservado, saída 80 ao SG NLB, ingresso correspondente e parâmetro público, mantendo VPC/EKS/NLB existentes. Preservar a descrição do SG NLB para evitar ForceNew. A exceção PrivateLink inbound off é substituída por on; o caminho V2 é protegido pelo SG reservado. Conferir explicitamente ausência de substituições no plano da base. Nenhum import/destroy de teste necessário. [ADR 010](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/010-GATEWAY-REST-V2.md) e [operação](GATEWAY.md).

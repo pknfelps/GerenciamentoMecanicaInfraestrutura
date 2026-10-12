@@ -30,4 +30,7 @@ jobs:
           terraform -chdir=bootstrap fmt -check -recursive
           terraform -chdir=bootstrap init -backend=false -lockfile=readonly
           terraform -chdir=bootstrap validate -no-color
+          terraform -chdir=gateway fmt -check -recursive
+          terraform -chdir=gateway init -backend=false -lockfile=readonly
+          terraform -chdir=gateway validate -no-color
           kubectl kustomize kubernetes
