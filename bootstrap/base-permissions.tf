@@ -231,6 +231,30 @@ locals {
   base_network_manage_policies = { for environment in local.environments : environment => {
     "Version" : "2012-10-17",
     "Statement" : [
+      # O NAT já removeu a associação; aws_eip ainda chama o ID salvo no plano.
+      # Exclui ambos os tipos reais suportados pela ação, permitindo somente a
+      # chamada idempotente sem AllocationId/NetworkInterfaceID de recurso real.
+      # Não usar Resource="*" nem condições de tags IfExists para essa chamada.
+      {
+        "Sid" : "DisassociateMissingAddress",
+        "Effect" : "Allow",
+        "Action" : [
+          "ec2:DisassociateAddress"
+        ],
+        "NotResource" : [
+          "arn:aws:ec2:*:*:elastic-ip/*",
+          "arn:aws:ec2:*:*:network-interface/*"
+        ],
+        "Condition" : {
+          "StringEquals" : {
+            "aws:RequestedRegion" : "${var.aws_region}"
+          },
+          "Null" : {
+            "ec2:AllocationId" : "true",
+            "ec2:NetworkInterfaceID" : "true"
+          }
+        }
+      },
       {
         "Sid" : "ManageOwnNetwork",
         "Effect" : "Allow",
@@ -423,7 +447,6 @@ locals {
           "eks:ListAccessEntries",
           "eks:CreateNodegroup",
           "eks:CreateAddon",
-          "eks:CreatePodIdentityAssociation"
         ],
         "Resource" : [
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:cluster/${var.project_name}-${environment}-eks"
@@ -442,16 +465,12 @@ locals {
           "eks:DeleteAddon",
           "eks:DescribeUpdate",
           "eks:ListUpdates",
-          "eks:DescribePodIdentityAssociation",
-          "eks:UpdatePodIdentityAssociation",
-          "eks:DeletePodIdentityAssociation"
         ],
         "Resource" : [
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:nodegroup/${var.project_name}-${environment}-eks/${var.project_name}-${environment}-eks-nodes/*",
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:addon/${var.project_name}-${environment}-eks/eks-pod-identity-agent/*",
-          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:addon/${var.project_name}-${environment}-eks/aws-ebs-csi-driver/*",
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:addon/${var.project_name}-${environment}-eks/metrics-server/*",
-          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:podidentityassociation/${var.project_name}-${environment}-eks/*"
+
         ]
       },
       {
@@ -509,14 +528,13 @@ locals {
         }
       },
       {
-        "Sid" : "AssociateWorkloadEdit",
+        "Sid" : "AssociateApiEdit",
         "Effect" : "Allow",
         "Action" : [
           "eks:AssociateAccessPolicy"
         ],
         "Resource" : [
-          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-api-github/*",
-          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-database-github/*"
+          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-api-github/*"
         ],
         "Condition" : {
           "StringEquals" : {
@@ -526,6 +544,30 @@ locals {
           "ForAllValues:StringEquals" : {
             "eks:namespaces" : [
               "default"
+            ]
+          },
+          "Null" : {
+            "eks:namespaces" : "false"
+          }
+        }
+      },
+      {
+        "Sid" : "AssociateDatabaseEdit",
+        "Effect" : "Allow",
+        "Action" : [
+          "eks:AssociateAccessPolicy"
+        ],
+        "Resource" : [
+          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-database-github/*"
+        ],
+        "Condition" : {
+          "StringEquals" : {
+            "eks:policyArn" : "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy",
+            "eks:accessScope" : "namespace"
+          },
+          "ForAllValues:StringEquals" : {
+            "eks:namespaces" : [
+              "database-init"
             ]
           },
           "Null" : {
@@ -555,16 +597,6 @@ locals {
         }
       },
       {
-        "Sid" : "CreateAddonPodAssociation",
-        "Effect" : "Allow",
-        "Action" : [
-          "eks:CreateAddon"
-        ],
-        "Resource" : [
-          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:podidentityassociation/${var.project_name}-${environment}-eks/*"
-        ]
-      },
-      {
         "Sid" : "TagOwnEks",
         "Effect" : "Allow",
         "Action" : [
@@ -576,7 +608,7 @@ locals {
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:cluster/${var.project_name}-${environment}-eks",
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:nodegroup/${var.project_name}-${environment}-eks/*",
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:addon/${var.project_name}-${environment}-eks/*",
-          "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:podidentityassociation/${var.project_name}-${environment}-eks/*",
+
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-base-github/*",
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-api-github/*",
           "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:access-entry/${var.project_name}-${environment}-eks/role/${var.aws_account_id}/${var.project_name}-${environment}-database-github/*",
@@ -602,7 +634,6 @@ locals {
         "Resource" : [
           "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-cluster-role",
           "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-node-role",
-          "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-ebs-csi-role"
         ]
       },
       {
@@ -618,7 +649,6 @@ locals {
         "Resource" : [
           "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-cluster-role",
           "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-node-role",
-          "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-ebs-csi-role"
         ]
       },
       {
@@ -659,24 +689,7 @@ locals {
           }
         }
       },
-      {
-        "Sid" : "AttachCsiPolicies",
-        "Effect" : "Allow",
-        "Action" : [
-          "iam:AttachRolePolicy",
-          "iam:DetachRolePolicy"
-        ],
-        "Resource" : [
-          "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-ebs-csi-role"
-        ],
-        "Condition" : {
-          "ArnEquals" : {
-            "iam:PolicyARN" : [
-              "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicyV2"
-            ]
-          }
-        }
-      },
+
       {
         "Sid" : "ReadOperator",
         "Effect" : "Allow",
@@ -720,20 +733,16 @@ locals {
           }
         }
       },
+
       {
-        "Sid" : "PassPodIdentityRole",
+        "Sid" : "ReadEksNodegroupServiceRole",
         "Effect" : "Allow",
         "Action" : [
-          "iam:PassRole"
+          "iam:GetRole"
         ],
         "Resource" : [
-          "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-${environment}-eks-ebs-csi-role"
-        ],
-        "Condition" : {
-          "StringEquals" : {
-            "iam:PassedToService" : "pods.eks.amazonaws.com"
-          }
-        }
+          "arn:aws:iam::${var.aws_account_id}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+        ]
       },
       {
         "Sid" : "CreateEksServiceRoles",

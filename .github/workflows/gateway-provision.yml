@@ -1,0 +1,152 @@
+name: gateway-provision
+run-name: gateway-provision / ${{ inputs.environment }} / ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Destino: develop/hom ou main/prd'
+        required: true
+        default: hom
+        type: choice
+        options: [hom, prd]
+      api_commit:
+        description: 'SHA completo do contrato da API implantada'
+        required: true
+        type: string
+      auth_commit:
+        description: 'SHA completo do contrato da autenticacao implantada'
+        required: true
+        type: string
+
+permissions: {}
+concurrency:
+  group: gateway-${{ inputs.environment }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+    working-directory: gateway
+env:
+  TARGET_ENVIRONMENT: ${{ inputs.environment }}
+  TF_VAR_api_commit: ${{ inputs.api_commit }}
+  TF_VAR_auth_commit: ${{ inputs.auth_commit }}
+  TF_VAR_api_contract_file: .inputs/api/openapi.json
+  TF_VAR_auth_contract_file: .inputs/auth/openapi.json
+  AWS_REGION: us-east-1
+  AWS_PAGER: ''
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  TF_WORKSPACE: default
+  CHECKPOINT_DISABLE: '1'
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check branch and contract revisions
+        run: |
+          test "$GITHUB_REPOSITORY" = pknfelps/GerenciamentoMecanicaInfraestrutura
+          case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
+            hom:refs/heads/develop|prd:refs/heads/main) ;;
+            *) echo '::error::Use develop/hom ou main/prd'; exit 1 ;;
+          esac
+          [[ "$TF_VAR_api_commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TF_VAR_auth_commit" =~ ^[0-9a-f]{40}$ ]]
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_GATEWAY_ROLE_ARN }}
+          allowed-account-ids: '121754142617'
+          role-session-name: gateway-plan-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Download and verify published contracts
+        run: |
+          for component in api auth; do
+            if [ "$component" = api ]; then commit="$TF_VAR_api_commit"; else commit="$TF_VAR_auth_commit"; fi
+            mkdir -p ".inputs/$component"
+            for file in openapi.json openapi.json.sha256; do
+              aws s3api get-object --bucket mecanica-artifacts-121754142617-us-east-1 \
+                --expected-bucket-owner 121754142617 --key "contracts/$component/$commit/$file" \
+                ".inputs/$component/$file" > /dev/null
+            done
+            # API uses sha256sum format; auth uses the raw SHA-256.
+            read -r hash _ < ".inputs/$component/openapi.json.sha256"
+            [[ "$hash" =~ ^[0-9a-f]{64}$ ]]
+            printf '%s  %s\n' "$hash" ".inputs/$component/openapi.json" | sha256sum --check --strict
+            printf -- '- %s contract: %s; SHA-256: %s\n' "$component" "$commit" "$hash" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
+      - run: terraform validate -no-color
+      - run: terraform plan -var-file="environments/$TARGET_ENVIRONMENT.tfvars" -out=tfplan -no-color -lock-timeout=60s
+      - name: Present saved plan
+        run: terraform show -no-color tfplan | tee tfplan.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: artifact
+        with:
+          name: gateway-provision-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            gateway/tfplan
+            gateway/tfplan.txt
+            gateway/.inputs/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  approval:
+    needs: plan
+    runs-on: ubuntu-24.04
+    environment: ${{ format('{0}-approval', inputs.environment) }}
+    permissions: {}
+    steps:
+      - run: echo 'Plano desta execucao aprovado pelo Environment protegido.'
+        working-directory: ${{ github.workspace }}
+
+  apply:
+    needs: [plan, approval]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_GATEWAY_ROLE_ARN }}
+          allowed-account-ids: '121754142617'
+          role-session-name: gateway-apply-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          path: gateway
+          merge-multiple: true
+      - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
+      - name: Apply approved plan
+        run: terraform apply -no-color -lock-timeout=60s tfplan
+      - name: Show public endpoint
+        run: terraform output -raw endpoint >> "$GITHUB_STEP_SUMMARY"

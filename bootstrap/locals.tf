@@ -19,11 +19,11 @@ locals {
       metadata_write = ["base"]
     }
     gateway = {
-      # Reusable workflows executam no contexto do chamador (API/auth/infra).
-      repositories   = ["infra", "api", "auth"]
+      # Gateway utiliza workflows manuais exclusivos do repositorio de infraestrutura.
+      repositories   = ["infra"]
       state_unit     = "gateway"
       artifact_read  = ["contracts/api", "contracts/auth"]
-      artifact_write = ["contracts/gateway"]
+      artifact_write = []
       metadata_write = ["gateway"]
     }
     database = {
@@ -42,9 +42,9 @@ locals {
     }
     auth = {
       repositories   = ["auth"]
-      state_unit     = "auth"
-      artifact_read  = ["contracts/auth", "lambda", "packages/GerenciamentoMecanica.Auth.Contracts"]
-      artifact_write = ["contracts/auth", "lambda"]
+      state_unit     = null
+      artifact_read  = ["contracts/auth"]
+      artifact_write = ["contracts/auth"]
       metadata_write = ["auth"]
     }
   }

@@ -33,6 +33,6 @@ resource "aws_eks_access_policy_association" "pipeline" {
 
   access_scope {
     type       = each.value.scope
-    namespaces = each.value.scope == "namespace" ? ["default"] : null
+    namespaces = each.value.scope == "namespace" ? (each.key == "database" ? ["database-init"] : ["default"]) : null
   }
 }

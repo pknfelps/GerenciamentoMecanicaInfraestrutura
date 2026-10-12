@@ -38,10 +38,6 @@ output "eks_node_role_arn" {
   value       = aws_iam_role.eks_nodes.arn
 }
 
-output "eks_ebs_csi_role_arn" {
-  description = "ARN da role IAM usada pelo add-on EBS CSI."
-  value       = aws_iam_role.ebs_csi.arn
-}
 
 output "eks_cluster_arn" {
   description = "ARN do cluster EKS."
@@ -64,7 +60,7 @@ output "workload_subnet_ids" {
 }
 
 output "database_subnet_ids" {
-  description = "Subnets isoladas em duas AZs para o DB subnet group do Aurora."
+  description = "Subnets isoladas em duas AZs para o DB subnet group do PostgreSQL."
   value       = aws_subnet.database[*].id
 }
 

@@ -1,110 +1,84 @@
-# Bootstrap persistente
+# Bootstrap administrativo persistente
 
-Unidade Terraform independente de `../terraform/`, que ainda representa o EKS herdado. Prepara S3, ECR e a identidade GitHub/AWS compartilhados por hom/prd. Não cria workloads, banco, rede nem recursos Kubernetes.
+## Decisão SAM da autenticação — 2026-10-11
 
-## Recursos e propriedade
+[ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md) define SAM/CloudFormation para os recursos auth, sem migrar este bootstrap. Role/policies auth-runtime continuam persistentes e serão reutilizadas pela stack; sua exclusão não fará parte do destroy auth, preservando a limpeza posterior de ENIs. Buckets/OIDC/role CI e IAM das pipelines continuam Terraform.
 
-| Recurso | Configuração |
-|---|---|
-| Estado S3 | Nome `<projeto>-tfstate-<conta>-us-east-1`; privado, AES256, versionado, HTTPS |
-| Artefatos S3 | Nome `<projeto>-artifacts-<conta>-us-east-1`; privado, AES256, versionado, escrita condicional |
-| ECR | `<projeto>/api`; tags imutáveis, scan no push, AES256 |
-| OIDC | GitHub, audience `sts.amazonaws.com`; criar ou referenciar provider existente |
-| IAM | Dez roles: base, gateway, database, api e auth, para hom e prd |
+auth-sam-permissions.tf acrescenta policies gerenciadas às roles auth hom/prd para a stack do ambiente, transforms Serverless/LanguageExtensions e upload/exclusão nativos SAM. DeleteObject fica restrito a sam/auth/<ambiente>/*; ListBucket exige esse prefixo. Não permitir DeleteObjectVersion, DeleteBucket ou exclusão de contratos/pacote/outro ambiente. ListChangeSets atende estados parciais; DescribeStacks na stack auxiliar de nome calculado pelo SAM permite inspeção sem exclusão/ECR. auth-permissions.tf administra aliases e egress nativo sem tags de regra, restrito ao SG reservado. Sem role de execução CloudFormation adicional, leitura de Secrets ou alteração do IAM runtime. Auth deixa de acessar seu backend Terraform e artefatos lambda antigos. Plano CI/SAM delete aprovado e aplicado em 2026-10-11; futuros applies exigem nova revisão/aprovação de plano salvo.
 
-Buckets, ECR e provider criado têm `prevent_destroy`. Buckets/ECR também não permitem remoção forçada de conteúdo. Não há expiração automática de imagens, versões ou contratos: referências por digest e rollback precisam continuar válidas. O bootstrap é persistente e nunca integra o descarte normal de um ambiente. As proteções do Terraform não substituem IAM e não protegem recursos removidos completamente da configuração.
+Template/workflows SAM com ZIP estão implementados e validados localmente. Inventário AWS em 2026-10-11 não encontrou função/stack/log/auth-v2 nem objetos/versões históricos de estado auth; código Terraform auth retirado sem destroy/exclusão de estado. Registros datados das partes 5/6 abaixo são históricos; o novo plano CI/SAM substitui o plano antigo de somente CI.
 
-O provider recusa conta diferente de `aws_account_id`. Backend remoto e recursos do bootstrap permanecem sob identidade administrativa própria, fora das roles de deploy. As roles base podem administrar somente as três roles de execução EKS do próprio ambiente, com associações de policies limitadas por role e PassRole por serviço. Nenhuma role pode alterar a identidade/permissões das pipelines, excluir buckets ou acessar o estado do bootstrap. Não há permissão sts:AssumeRole nas pipelines.
+Mantém estados S3 versionados/locking, artefatos imutáveis, ECR, OIDC e permissões por componente/ambiente. Não pertence ao descarte normal de hom/prd. Nenhum workflow administrativo novo foi criado.
 
-## Inputs e configuração inicial
-
-Copiar `bootstrap.tfvars.example` para `bootstrap.tfvars` e revisar a conta, o prefixo de nomes e os subjects. Arquivos locais estão ignorados no Git; não inserir credenciais neles. Os nomes dos buckets incluem conta/região, mas disponibilidade global e eventual recurso já existente devem ser conferidos no plano real.
-
-`github_subject_prefixes` exige quatro repositórios exatos. O código acrescenta `:environment:hom` ou `:environment:prd` e usa `StringEquals`, sem wildcard na confiança. Audience obrigatória: `sts.amazonaws.com`. A confiança também exige o claim `ref` exato: refs/heads/develop para hom e refs/heads/main para prd, conforme suporte atual documentado pela AWS.
-
-O exemplo usa IDs públicos consultados em 2026-09-22 e o formato padrão documentado pelo GitHub: API criada antes de 15/07/2026 com subject por nome; três novos repositórios com owner/repository IDs imutáveis. Isso é uma previsão, não uma observação de tokens reais. Conferir o claim `sub` emitido pelo workflow antes da aplicação, especialmente se houver customização, renomeação ou transferência. Não registrar o JWT completo. Uma configuração divergente deve falhar na autenticação, sem ampliar a confiança para `repo:owner/*`.
-
-Manter as regras de Environment: hom aceita somente develop e prd somente main. Jobs de PR validam localmente e não recebem as roles AWS. Jobs de deploy devem declarar o Environment explicitamente e solicitar `id-token: write`.
-
-A role Gateway aceita subjects exatos de infra, API e autenticação do mesmo ambiente, pois um workflow reutilizável executa no contexto do chamador. Não aceita BancoDados nem o outro ambiente. O workflow reutilizável deverá ser fixado por commit; esta confiança não verifica ainda o SHA do workflow.
-
-## Permissões disponíveis
-
-Cada role possui uma política `bootstrap-access`. Os statements gerados em `identity.tf` têm os seguintes propósitos:
-
-| Statement | Escopo |
-|---|---|
-| LocateStateBucket / ListOwnState | Localizar bucket e listar apenas a chave/lock da unidade; prefixo de descoberta de workspaces próprio |
-| ReadWriteOwnState | Get/Put somente no estado da unidade/ambiente |
-| OwnStateLock | Get/Put/Delete somente no arquivo .tflock correspondente |
-| ReadArtifacts | Get somente nos prefixos consumidos pelo componente |
-| PublishArtifacts | Put somente nos prefixos produzidos; sem Delete, ACL ou exclusão de versões |
-| ReadEnvironmentMetadata | Leitura SSM somente em /mecanica/<ambiente>/; guardar ali apenas metadados não secretos |
-| PublishOwnMetadata | Put/tag/Delete somente no namespace v1 produzido pelo componente |
-| EcrAuthentication | Token ECR; Resource * exigido por essa operação, presente somente nas roles da API |
-| PublishApiImage | Publicação/leitura das camadas somente no repositório ECR da API |
-
-API não acessa estado Terraform. API publica `contracts/api/` e `packages/GerenciamentoMecanica.Auth.Contracts/`; autenticação lê o pacote e publica `contracts/auth/` e `lambda/`; Gateway lê os dois contratos e publica `contracts/gateway/`. Base/banco não recebem acesso ao bucket de artefatos neste estágio.
-
-As permissões da base foram acrescentadas em [base-permissions.tf](base-permissions.tf): quatro policies gerenciadas por ambiente para EC2/EKS/IAM, anexadas somente à base; API/banco recebem DescribeCluster do ambiente. IAM/PassRole limitado às três roles EKS e policies de serviço correspondentes. Não há gerenciamento de roles OIDC pela pipeline. Access entries Kubernetes ficam na unidade da base. Aplicar estas alterações de bootstrap com identidade administrativa, seguindo [PIPELINES_BASE.md](../docs/PIPELINES_BASE.md).
-
-Essas são roles de pipeline, não de execução dos pods/Lambda. Permissões para gerenciar Aurora, Lambda, Gateway e secrets continuam junto dos respectivos componentes em E2/E3. EKS e suas roles de execução estão cobertos pela ampliação da base descrita acima. O bootstrap não fornece um deploy completo. Não usar AdministratorAccess ou PassRole irrestrito para preencher essas pendências.
-
-## Estados e locking
-
-Use o workspace `default`, com um backend por unidade/ambiente:
-
-- `shared/bootstrap/terraform.tfstate`: somente administração do bootstrap.
-- `hom/<base|gateway|database|auth>/terraform.tfstate`.
-- `prd/<base|gateway|database|auth>/terraform.tfstate`.
-
-Todos os backends S3 devem usar `encrypt=true` e `use_lockfile=true`. O output `backend_configs` também define `workspace_key_prefix` por unidade; o prefixo pode ser listado para descoberta, mas estados de workspaces adicionais não têm acesso concedido. Não usar Terraform workspaces para separar hom/prd.
-
-O lock protege cada estado. Coordenação entre repositórios/dependências ainda será implementada; locks distintos não impedem hom/prd coexistirem.
-
-## Artefatos sem sobrescrita
-
-A policy de artefatos exige `If-None-Match` na criação de objetos, inclusive conclusão de multipart; as etapas intermediárias de multipart são isentas porque não aceitam esse cabeçalho. Para arquivos pequenos, publicar usando chave por commit e:
+Usar Terraform 1.15.9, provider lock versionado, credencial administrativa autenticada na conta 121754142617/us-east-1. Preservar backend.hcl/backend.s3.tf e bootstrap.tfvars locais existentes; não versionar estado, planos ou credenciais. O exemplo de tfvars documenta inputs não secretos.
 
 ```powershell
-aws s3api put-object --bucket <bucket-artefatos> --key contracts/api/<commit>/openapi.json --body openapi.json --if-none-match "*"
+terraform init -backend-config=backend.hcl -lockfile=readonly
+terraform fmt -check
+terraform validate
+terraform plan -var-file=bootstrap.tfvars -out=bootstrap.tfplan
+terraform show -no-color bootstrap.tfplan
+# Somente depois da aprovacao do plano exibido:
+terraform apply bootstrap.tfplan
 ```
 
-Não usar `aws s3 cp` como substituto sem conferir suporte ao cabeçalho condicional. Uma publicação repetida deve conferir o checksum do objeto existente, não sobrescrevê-lo. Nenhuma role das pipelines exclui artefatos/versões. Versionamento isoladamente não garante imutabilidade; administradores da conta ainda podem administrar dados/policies.
+Mudanças declarativas: base recebe CRUD NLB/target group/listener e attach/detach do ASG exclusivo do EKS; SGs próprios. Banco recebe gestão dos metadados/versões write-only de seus secrets API/auth e leitura do segredo RDS administrativo existente. Credenciais atuais tagged database-provision são aceitas para adoção; novos recursos usam Terraform. SSM Put/Tag/Delete é exclusivo de v2 do próprio produtor; leitura de v2 no ambiente. Sem permissão para publicar releases v1.
 
-## Validação local e CI
+`allow_legacy_cleanup=true` mantém exclusivamente leitura/descarte de roles controller/CSI e Delete de SSM v1 próprio. Necessário até o apply de remoção da base e retirada v1. Depois da migração, gerar/revisar novo plano com `-var=allow_legacy_cleanup=false`, aplicar o binário aprovado e persistir essa escolha no bootstrap.tfvars local. Não retirar antes: a pipeline ainda precisa apagar os recursos no estado. Permissões de rede usadas pelo Terraform permanecem. A desativação também retira leitura do namespace v1 do próprio produtor.
 
-Terraform 1.15.9 e AWS provider 6.58.0, conforme lockfile com checksums Windows/Linux. Da raiz do repositório:
+Aplicado em 2026-10-08, após aprovação do plano salvo: 2 policies criadas, 22 atualizadas e nenhuma exclusão, cobrindo hom/prd. A conferência Terraform posterior retornou `No changes`. `allow_legacy_cleanup=true` permanece até a remoção dos recursos antigos e a migração SSM v2; sua desativação exige outro plano aprovado. Ordem/procedimento em [migração](../docs/MIGRACAO_DECLARATIVA.md).
 
-```powershell
-terraform -chdir=bootstrap fmt -check -recursive
-terraform -chdir=bootstrap init -backend=false -input=false -lockfile=readonly
-terraform -chdir=bootstrap validate
-terraform -chdir=bootstrap test
-```
+Correção adicional aplicada em 2026-10-08 com plano salvo aprovado: 4 policies atualizadas, sem criações ou exclusões, adicionando `ssm:DescribeParameters` às roles base/banco de hom/prd. A leitura de metadados usa `Resource="*"`, restrita a `us-east-1`; os valores e a escrita dos parâmetros mantêm o escopo atual. Simulação IAM das quatro roles retornou `allowed`; conferência Terraform posterior retornou `No changes`.
 
-Os testes usam `mock_provider "aws"` e todos os runs usam `command=plan`. Não usam credenciais, backend remoto ou apply. Cobrem trust por ambiente/repositório, estado e permissões, proteção dos dados, reutilização de provider e rejeição de inputs inválidos.
+JWT E2.12: implementação local acrescenta a policy gerenciada mecanica-<ambiente>-base-jwt à role da base em hom/prd. Autoriza administração do Secret /mecanica/<ambiente>/base/jwt, da role mecanica-<ambiente>-api-runtime e de sua associação Pod Identity; PassRole restrito a pods.eks.amazonaws.com. Não concede leitura do valor JWT à pipeline da base nem altera as policies inline existentes. O provider AWS 6.58.0 inspeciona versões write-only por metadados. Aplicação desta mudança depende de novo plano salvo aprovado; [operação JWT](../docs/JWT_COMPARTILHADO.md).
 
-O check existente `terraform-validate` valida as duas unidades (`terraform/` e `bootstrap/`) e executa os testes simulados. Planos simulados não comprovam permissões de provisionamento, disponibilidade de nomes ou login OIDC real.
+Bootstrap JWT aplicado em 2026-10-08 usando exatamente o binário aprovado: 4 criações (duas policies gerenciadas e duas associações), nenhuma alteração/exclusão. Conferência Terraform posterior: No changes. Simulação das roles base hom/prd: DescribeSecret permitido e GetSecretValue negado. JWT/SSM/role/associação do runtime serão criados pela base após PR e aprovação do base-provision; nenhum apply da base foi executado nesta operação.
 
-## Primeira execução na AWS — etapa posterior
+E2.6: a nova policy read-database pertence ao Terraform da base e usa as permissões GetRolePolicy/PutRolePolicy/DeleteRolePolicy já concedidas por base-jwt à role API exata. Não exige alteração de código/apply do bootstrap. Revisar/aprovar o plano da base antes de aplicar; a simulação das permissões administrativas confirmou allowed para hom. Consulte [runtime API](../docs/API_RUNTIME.md).
 
-1. Autenticar localmente com uma identidade autorizada a administrar o bootstrap e conferir conta com `aws sts get-caller-identity`. A sessão do plugin AWS é independente da AWS CLI/Terraform.
-2. Revisar subjects reais, providers existentes e os inputs. Se um provider do GitHub já pertencer a outro estado, preencher `existing_github_oidc_provider_arn` e conferir URL/audience. Não criar um segundo provider nem importar automaticamente recurso alheio.
-3. Manter inicialmente backend local (não copiar ainda `backend.s3.tf.example`). Executar `terraform -chdir=bootstrap plan -var-file=bootstrap.tfvars -out=bootstrap.tfplan` e revisar com `terraform -chdir=bootstrap show bootstrap.tfplan`.
-4. Somente na etapa de provisionamento, aplicar o plano revisado. Preservar o estado local até concluir a migração. Nunca versionar estado ou plano.
-5. Conferir `terraform -chdir=bootstrap output bootstrap_backend_config`. Copiar `backend.s3.tf.example` para `backend.s3.tf` e `backend.hcl.example` para `backend.hcl`, ajustando nomes aos outputs. Migrar com `terraform -chdir=bootstrap init -migrate-state -backend-config=backend.hcl`. Não substituir por `-reconfigure`, que não migra o estado.
-6. Conferir o estado remoto e um novo plano sem mudanças antes de remover cópias locais. Nas próximas execuções, reconstruir os arquivos de backend ignorados a partir desses exemplos e usar o S3; não reiniciar acidentalmente com estado local vazio.
-7. Usar `terraform -chdir=bootstrap output -json github_environment_variables` para substituir as descrições provisórias nos oito Environments. Referência do ECR em `shared_resources`; o publicador de metadados da base ainda será implementado.
-8. Validar OIDC por ambiente/componente e acesso aos recursos esperados, incluindo rejeição do ambiente/repositório errado. Só depois integrar deploys reais.
+## Lambda de autenticação — parte 5 (preparação local)
 
-Não há workflow que aplique este bootstrap automaticamente. Alterações do bootstrap seguem a identidade administrativa inicial e revisão própria; suas pipelines de workload não podem editar a própria confiança/permissões.
+auth-runtime.tf define mecanica-hom-auth-runtime e mecanica-prd-auth-runtime com confiança exclusiva no serviço Lambda. Roles e policies de execução pertencem ao estado persistente do bootstrap, não ao auth; o destroy normal da função preserva essas permissões para que a AWS conclua a limpeza de suas interfaces de rede. A base continua dona do SG reservado e auth administra somente suas duas regras de saída. Aguardar liberação de ENIs antes de descartar banco/base/rede; o retorno de DeleteFunction não comprova limpeza concluída. [Permissões VPC e limpeza](https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html).
 
-## Referências
+A execução recebe GetParameters exclusivamente nos nove nomes SSM v2 do carregador, GetSecretValue somente em AWSCURRENT dos Secrets /mecanica/<ambiente>/base/jwt e /mecanica/<ambiente>/database/auth (sufixo AWS de seis caracteres), escrita no próprio log group e ações EC2 necessárias às ENIs em us-east-1. O Deny condicionado a lambda:SourceFunctionArn impede essas ações EC2 quando chamadas pelo código da própria função, preservando as chamadas do serviço Lambda. Não há leitura de secrets administrativos, database/api ou outro ambiente.
 
-- [GitHub OIDC e formatos de subject](https://docs.github.com/en/actions/reference/security/oidc).
-- [OIDC na AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws).
-- [Terraform backend S3](https://developer.hashicorp.com/terraform/language/backend/s3).
-- [Testes com provider simulado](https://developer.hashicorp.com/terraform/language/tests/mocking).
-- [S3: exigir escrita condicional](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).
-- [AWS: claims GitHub disponíveis para condições IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#condition-keys-wif).
+auth-permissions.tf acrescenta a policy gerenciada mecanica-<ambiente>-auth-provision à role OIDC auth existente. Administra a função/versões/concorrência/log group, egress do SG reservado identificado por tags e as tags das regras próprias; permite inspeção de rede/metadados, leitura de versões dos artefatos e invocação futura da própria função. GetRole e PassRole são limitados à role auth-runtime; PassRole exige lambda.amazonaws.com. A pipeline não modifica essa role/policy nem lê valores de Secrets. A permissão de invocação pelo Gateway pertence à unidade gateway futura. As policies inline atuais das pipelines foram preservadas.
+
+Nesta parte não houve login, Access Analyzer, plan AWS ou apply. Gerar/revisar/aplicar o plano salvo do bootstrap na próxima entrega usando os comandos administrativos acima, antes de plan da função. A criação declarada não comprova que a role exista na AWS. Preservar backend/nomes/estado e allow_legacy_cleanup=false já adotado em 2026-10-09; os registros anteriores com true são históricos.
+
+Pré-requisitos atuais: bootstrap CI/SAM aplicado, quota suficiente, base/banco recriados, Job database-init concluído e publicação SAM/OpenAPI do commit. A stack referencia ARN da role runtime persistente. ZIP/template nativos, deploy/descarte SAM manuais sem aprovação intermediária e limpeza somente do ZIP atual/templates operacionais estão no [procedimento auth](https://github.com/pknfelps/GerenciamentoMecanicaAutenticacao/blob/develop/docs/DEPLOY.md). Nenhuma função é implantada por este bootstrap.
+**2026-10-09 — Bootstrap auth aplicado:** após aprovação explícita do plano salvo, aplicado exatamente o binário bootstrap-auth-runtime.tfplan (SHA-256 522ED5C8F0272A66F5D66D979CF3BE1B953E2DE77EE6925179C1F73C84E30160), com a sessão administrativa existente na conta 121754142617. Resultado: oito criações, zero alterações/exclusões — roles auth-runtime, policies de execução, policies auth-provision e associações em hom/prd. Quatro policies validadas pelo Access Analyzer sem findings; conferência posterior Terraform retornou No changes. Trust Lambda, policy inline e associação à pipeline conferidas nas duas roles. Simulações IAM hom/prd: JWT/auth do próprio ambiente em AWSCURRENT permitidos, database/api e JWT do outro ambiente negados; pipelines auth sem leitura dos dois Secrets. Nenhum valor de Secret foi consultado. allow_legacy_cleanup=false preservado. Evidências locais em artifacts/bootstrap-auth-runtime. Função, ZIP/OpenAPI, workflows e Gateway permanecem pendentes; base/banco precisam ser recriados antes do deploy.
+## CI da autenticacao — parte 6
+
+auth-ci.tf acrescenta somente a role mecanica-auth-ci-github, path /mecanica/pipelines/, e sua policy inline ReadAuthContracts100. Trust OIDC usa audience sts.amazonaws.com e subjects exatos do repositorio auth para pull_request, develop e main, sem Environment e sem alterar a trust das roles de deploy. A policy permite somente s3:GetObject nos dois objetos Auth.Contracts/1.0.0 (nupkg e .sha256), sem ListBucket, escrita, SSM, estado ou Secrets.
+
+O output auth_ci_role_arn deve preencher AWS_CI_ROLE_ARN como variavel do repositorio de autenticacao. Variavel CI ja configurada no GitHub. Environments de aprovacao criados anteriormente nao sao mais utilizados pelos workflows auth; hom/prd continuam fornecendo OIDC/variaveis. Nenhuma configuracao remota foi removida nesta simplificacao. A role CI ainda precisa de novo plano salvo revisado/aprovado antes de apply; o bootstrap auth-runtime aplicado na parte 5 nao inclui essa role nova.
+
+Validar fmt/init sem backend/validate e gerar plano administrativo com bootstrap.tfvars. O plano atual inclui CI e SAM: seis criações, cinco alterações e zero exclusões; allow_legacy_cleanup=false preservado. Não ampliar roles de deploy para PRs. [Procedimento auth](https://github.com/pknfelps/GerenciamentoMecanicaAutenticacao/blob/develop/docs/DEPLOY.md).
+
+Plano CI anterior em artifacts/bootstrap-auth-ci (duas criações, hash A08A38085549F28BBA6C7025572102248677B428128BAEA3D2B2F003C46E67F6) é histórico e foi substituído pelo novo plano CI/SAM direto abaixo. Não aplicar esse plano antigo contra o código SAM atual.
+
+## Plano CI/SAM delete — aplicado em 2026-10-11
+
+[Plano textual](../artifacts/bootstrap-auth-sam-delete/tfplan.txt) e [revisão](../artifacts/bootstrap-auth-sam-delete/REVISAO.md). Binário bootstrap-auth-sam-delete.tfplan; SHA-256 D396D208E6D9A7D99D104E52A33FA1994F7B4EC963D802C31C224E861454F5A5. Substitui bootstrap-auth-sam-direct, bootstrap-auth-sam e bootstrap-auth-ci; não aplicar os binários antigos.
+
+- Seis criações: role/policy CI, duas policies auth-sam e suas associações. SAM pode fazer deploy/delete na stack própria e administrar os arquivos nativos do ambiente.
+- Cinco alterações: duas policies auth-provision (alias/egress nativo), duas policies pipeline (sem backend auth/artefatos antigos) e policy do bucket de artefatos.
+- Nenhuma exclusão/substituição; runtime IAM/buckets/OIDC/ECR/estados existentes preservados. Exceção de escrita condicional exclusivamente sam/auth/hom/ e sam/auth/prd/; contratos/NuGet protegidos.
+- Mudança desde o plano direto: somente duas policies SAM recebem DeleteObject/ListBucket restritos ao ambiente, ListChangeSets próprio e DescribeStacks da stack auxiliar. Sem DeleteObjectVersion, DeleteBucket ou exclusão de ECR/stack auxiliar/outro ambiente. Policies SAM com 1.991/6.144 caracteres; seis restantes idênticas ao plano anterior.
+- Duas policies SAM validadas no Access Analyzer sem findings; 52 decisões IAM simuladas confirmam os limites. actionlint/ShellCheck e Terraform fmt/validate aprovados. Não comprova deploy/destroy SAM real.
+- Quota total/não reservada anteriormente conferida: 10; reserva cinco requer mínimo 105 sem outras reservas. Pedido 110 pendente; não reduzir automaticamente a reserva.
+
+Plano aprovado pelo mantenedor e aplicado exatamente pelo binário acima: 6 recursos criados, 5 alterados, nenhum removido. Terraform pós-apply retornou No changes. Policies/associações SAM, trust/policy CI e policy/versionamento do bucket conferidos na AWS. Evidências apply.txt, post-apply-plan.txt e deployed-*.json no mesmo diretório. Não reaplicar o binário consumido. A aplicação não cria a Lambda nem recria base/banco. Próximo: quota suficiente → base/banco/Job → publicação → sam deploy manual → hom. Publicação, implantação e destroy ficam a cargo do mantenedor. auth-provision/auth-destroy executam completos após disparo manual, sem job de aprovação; bootstrap Terraform mantém plano aprovado.
+
+## Gateway REST — 12/10/2026
+
+O bootstrap mantém a service-linked role API Gateway (ops.apigateway.amazonaws.com), a role mecanica-apigateway-logs e a configuração regional de CloudWatch. São persistentes; o estado Gateway administra apenas seus log groups. A policy de logs é limitada aos dois grupos /aws/apigateway/mecanica-<ambiente>-gateway e ao grupo técnico /aws/apigateway/welcome utilizado pela validação da AWS, com inspeção regional de grupos.
+
+Gateway possui uma policy gerenciada por ambiente em gateway-permissions.tf: criação com nome/tags exigidos, gerenciamento de API/VPC Link pelos tags do ambiente, logs próprios, rede somente inspeção e AddPermission apenas para apigateway.amazonaws.com na versão auth própria. Não concede leitura de Secrets, modificação da Lambda ou administração de outro ambiente. A confiança OIDC aceita somente o repositório infra; contracts/api e contracts/auth são somente leitura. Policies inline base-gateway-permissions.tf permitem criar/administrar o SG reservado, sua saída e o ingresso NLB, sem abertura de CIDRs.
+
+Plano original em artifacts/bootstrap-gateway/bootstrap-gateway.tfplan: 10 criações, 4 alterações, nenhuma exclusão/substituição. Aplicado parcialmente; a configuração regional de logs foi concluída pelo plano complementar aprovado abaixo. Binários consumidos são históricos e não devem ser reaplicados. [Sequência e operação](../docs/GATEWAY.md).
+
+### Resultado do apply Gateway — 12/10/2026
+
+Plano aprovado aplicado parcialmente: nove criações/quatro alterações IAM concluídas, configuração regional de logs falhou. CloudTrail comprovou CreateLogGroup negado em /aws/apigateway/welcome, usado pela AWS para validar a role. Código acrescenta apenas esse grupo/streams à policy regional; as pipelines Gateway continuam restritas aos respectivos ambientes. Plano complementar artifacts/bootstrap-gateway/bootstrap-gateway-welcome.tfplan aprovado e aplicado: uma criação/uma alteração/zero exclusões. Configuração regional aponta à role mecanica-apigateway-logs, conferida por GetAccount; plano posterior retornou No changes. Evidências welcome-apply.log, post-welcome-account.json e post-welcome-plan.txt no mesmo diretório. Não reaplicar o plano original após a alteração de estado. [Revisão local](../artifacts/bootstrap-gateway/REVISAO-WELCOME.md).
