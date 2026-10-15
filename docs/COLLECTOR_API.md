@@ -1,8 +1,8 @@
 # Collector da API — preparação local
 
-O Collector pertence à infraestrutura. Os manifestos em [kubernetes/observability](../kubernetes/observability/kustomization.yaml) formam uma Kustomization independente e **não integram a raiz kubernetes aplicada pelos workflows da base**. Hom/prd usam os mesmos arquivos em clusters separados.
+O Collector pertence à infraestrutura. Os manifestos em [kubernetes/observability](../kubernetes/observability/kustomization.yaml) formam uma Kustomization independente e **não integram a raiz kubernetes**. O base-provision agora aplica essa unidade separadamente após os manifestos da base; base-destroy a remove antes deles e do apply Terraform. Hom/prd usam os mesmos arquivos em clusters separados.
 
-Esta entrega prepara e valida os manifestos localmente. Não houve login, implantação ou operação AWS, integração de workflow, alteração Terraform/IAM ou ativação da API.
+Manifestos e integração dos workflows foram preparados e validados localmente. Não houve login, implantação, execução remota de workflows, operação AWS, alteração Terraform/IAM ou ativação da API.
 
 ## Recursos e configuração
 
@@ -50,9 +50,9 @@ Somente nesse teste, o comando nativo do Collector sobrepõe `debug.verbosity=de
 
 O Collector com basic também é exercitado localmente sem override, conferindo health, recebimento de traces/métricas/logs e ausência do conteúdo dos registros nos resumos. Isso não substitui a futura validação Kubernetes.
 
-## Operação futura — comandos não executados na AWS
+## Workflows e operação — sem execução AWS nesta entrega
 
-O mantenedor deverá selecionar e conferir o contexto do cluster correto, com acesso administrativo ao namespace observability. A pipeline da API mantém acesso ao namespace default e não administra estes recursos.
+O mantenedor executará base-provision com plan salvo → aprovação → apply. Após o Terraform e os manifestos da base, o job aplica kubernetes/observability, executa rollout restart e aguarda rollout status por até 300 segundos. O restart é intencional em cada execução para reler o ConfigMap estável; Recreate admite breve interrupção. Falha encerra o job, apresenta recursos/eventos/logs limitados e não desfaz recursos já aplicados. O resumo comprova saúde do processo, sem declarar ingestão externa. A role base já tem acesso administrativo ao cluster; a pipeline da API mantém acesso ao namespace default e não administra estes recursos. Para operação manual, selecionar e conferir o contexto correto antes dos comandos abaixo.
 
 ```powershell
 kubectl config current-context
@@ -78,11 +78,11 @@ Para remover, primeiro desabilitar a exportação da API em seu manifesto e conc
 kubectl delete -k kubernetes/observability --ignore-not-found=true --wait=true --timeout=120s
 ```
 
-O delete inclui o namespace e seus recursos. O namespace pertence a esta unidade; não é um namespace compartilhado com recursos de outros donos. api-destroy não remove este Collector, e base-destroy ainda não integra a Kustomization independente. Até a integração dos workflows, o mantenedor deverá coordenar sua remoção antes da base.
+O delete inclui o namespace e seus recursos. O namespace pertence a esta unidade; não é compartilhado com recursos de outros donos. api-destroy não remove este Collector. base-destroy, após aprovação do plano salvo, remove a unidade com --ignore-not-found=true --cascade=foreground --wait=true --timeout=300s, antes dos manifestos da base e do apply Terraform. Ausência é tolerada; falhas bloqueiam o descarte, sem forçar finalizadores. A ordem permanece Gateway/consumidores → auth/API → banco → base; o Collector é removido pela base depois de interromper sua exportação.
 
 ## Pendências
 
-Integração com workflows, ativação, New Relic/credencial do exporter, enriquecimento/métricas Kubernetes, CloudWatch/X-Ray e avaliação de consumo no EKS continuam pendentes. Os manifestos não criam chaves, destinos fictícios ou permissões antecipadas. O SDK permanece responsável pela sanitização antes de exportar. E5.1–E5.3 continuam parciais.
+Execução dos workflows na AWS, ativação, New Relic/credencial do exporter, enriquecimento/métricas Kubernetes, CloudWatch/X-Ray e avaliação de consumo no EKS continuam pendentes. O CI já renderiza ambas as Kustomizations e valida o YAML com o comando nativo da imagem Contrib 0.161.0. Os manifestos não criam chaves, destinos fictícios ou permissões antecipadas. O SDK permanece responsável pela sanitização antes de exportar. E5.1–E5.3 continuam parciais.
 
 
 ## Resultado local — 15/10/2026
