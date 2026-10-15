@@ -152,3 +152,22 @@ Plano salvo do bootstrap aplicado dentro da autorização de recuperação AWS: 
 A reconciliação foi feita por plan -destroy salvo e apply do mesmo plano, sem state rm, edição manual ou alterações reais: 0 added, 0 changed, 0 destroyed. Estado final sem recursos managed; EC2 sem interfaces de rede associadas ao SG sg-0a0169a0068e6f502. O descarte do Gateway hom está concluído. O workflow ainda pode ser executado novamente para registrar sucesso no GitHub, usando novo plano; não reutilizar o plano que falhou.
 
 Evidências em artifacts/bootstrap-gateway-vpc-link-read. Versionar a correção no bootstrap e estes registros. [Provider AWS 6.58.0: leitura e espera de exclusão](https://github.com/hashicorp/terraform-provider-aws/blob/v6.58.0/internal/service/apigatewayv2/vpc_link.go).
+
+## X-Ray e layer Collector — preparação local de 15/10/2026
+
+O bootstrap prepara duas alterações por ambiente, sem aplicação AWS nesta entrega:
+
+- A policy inline da role persistente `mecanica-<ambiente>-auth-runtime` permite somente `xray:PutTraceSegments` e `xray:PutTelemetryRecords`, com Resource `*` exigido pelas ações e condição `aws:RequestedRegion=us-east-1`. Não concede leitura de traces ou administração X-Ray.
+- A policy gerenciada auth-provision da pipeline permite `lambda:GetLayerVersion` exclusivamente em `arn:aws:lambda:us-east-1:184161586896:layer:opentelemetry-collector-amd64-0_22_0:1`. A role CI não recebe essa permissão. Leitura de Secrets e confiança das roles permanecem iguais.
+
+O SAM referencia a role runtime existente, sem administrá-la. A service-linked role regional do API Gateway já declarada e sua policy AWS são preservadas; não há novos statements nas pipelines Gateway. X-Ray nativo e OpenTelemetry são controles independentes, ambos desabilitados por padrão.
+
+Conferência local: Terraform fmt/init com backend desabilitado/validate, avaliação dos JSONs das policies e limites IAM. Isso não comprova autorização real, existência da layer ou ingestão. Antes da ativação, gerar novo plano AWS salvo do bootstrap, revisar e aplicar somente após aprovação; nenhum plano anterior cobre estas permissões.
+
+Após o bootstrap aprovado/aplicado: publicar revisão nova auth → provisionar com telemetry_enabled e xray_enabled explícitos → revisar/aprovar/aplicar Gateway com xray_tracing_enabled desejado → conferir segmentos com chamadas controladas e dados fictícios. Segmentos nativos AWS não passam pela sanitização da aplicação. Correlação W3C/X-Ray, CloudWatch/New Relic, amostragem e ausência de duplicação permanecem para validação posterior. Não executar destroy para testar.
+
+## Plano bootstrap E5 X-Ray/layer — 15/10/2026
+
+[Plano textual](../artifacts/bootstrap-e5-xray/tfplan.txt) e [revisão](../artifacts/bootstrap-e5-xray/REVISAO.md): zero criações, quatro alterações IAM (auth-provision e auth-runtime hom/prd), zero exclusões/substituições. Somente GetLayerVersion na versão exata do Collector pelas pipelines auth e PutTraceSegments/PutTelemetryRecords no runtime em us-east-1. Demais statements/atributos/outputs preservados; allow_legacy_cleanup=false. Quatro policies Access Analyzer sem findings. Binário bootstrap-e5-xray.tfplan; SHA-256 714579D0B104B53EBAF848B1D68E432104E3DCB54BD792C1003BE1BDCAB24F57. Plano completo gerado com sessão administrativa; aguardando aprovação, nenhum apply ou ativação. O arquivo INCOMPLETO-mecanica.tfplan é evidência inválida para aplicação. Publicação/provisionamento auth e configuração Gateway continuam posteriores à aprovação/aplicação.
+
+**Aplicação aprovada concluída:** aplicado exatamente bootstrap-e5-xray.tfplan, SHA-256 714579D0B104B53EBAF848B1D68E432104E3DCB54BD792C1003BE1BDCAB24F57. Resultado: zero criações, quatro alterações e zero exclusões. Quatro policies implantadas idênticas às aprovadas; associações auth hom/prd conferidas. Conferência Terraform posterior retornou No changes. Evidências apply.log, post-apply-verification.json, deployed-*.json e post-apply-plan.txt em artifacts/bootstrap-e5-xray. Binário consumido: não reaplicar. Nenhuma ativação, deploy Gateway/Lambda ou destroy executado; publicação/provisionamento e conferência de segmentos nativos continuam posteriores.

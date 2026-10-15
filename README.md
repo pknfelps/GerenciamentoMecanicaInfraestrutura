@@ -6,12 +6,12 @@ AWS deste repositório em Terraform; Service e namespace em manifestos Kubernete
 |---|---|
 | bootstrap | S3 estado/artefatos, ECR, OIDC, role/policy persistente auth-runtime e permissões das pipelines |
 | terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
-| kubernetes | Service NodePort e namespace database-init |
+| kubernetes | Service NodePort e namespace database-init; Collector preparado em Kustomization independente |
 | gateway | REST API Regional, VPC Link V2, integrações API/Lambda, logs e SSM próprios |
 
 Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP pendentes.
 
-CI: `terraform fmt -check`, `init -backend=false`, `validate` e `kubectl kustomize kubernetes`. Não há testes operacionais próprios; testes de negócio vivem nos repositórios das aplicações.
+CI: `terraform fmt -check`, `init -backend=false`, `validate`, renderização das Kustomizations da base/Collector e validação nativa do YAML com Contrib 0.161.0. Não há testes operacionais próprios; testes de negócio vivem nos repositórios das aplicações.
 
 Provisionamento/destroy das unidades Terraform somente manuais: plan salvo → aprovação hom-approval/prd-approval → apply do mesmo artefato/commit. Nenhum apply por push ou replan após aprovação. O mantenedor deve coordenar alterações sequenciais por ambiente e gerar novo plano dos consumidores quando mudar uma dependência.
 
@@ -27,3 +27,13 @@ Provisionamento/destroy das unidades Terraform somente manuais: plan salvo → a
 Implementação local preparada; a migração AWS exige revisão/aprovação dos planos. Não descartar recursos para testar esta reformulação.
 
 Parte 6 da autenticacao: bootstrap prepara role CI de leitura exclusiva do pacote 1.0.0. Aplicacao exige plano salvo aprovado; workflows da funcao usam publicacao separada e provisionamento/destroy SAM manuais sem aprovacao intermediaria. sam delete remove ZIP atual/templates operacionais e preserva contratos, outras revisoes, bucket e IAM persistente. Consulte [bootstrap](bootstrap/README.md) e [procedimento auth](https://github.com/pknfelps/GerenciamentoMecanicaAutenticacao/blob/develop/docs/DEPLOY.md).
+
+## Collector da API — preparação E5
+
+[kubernetes/observability](kubernetes/observability/kustomization.yaml) contém Namespace, ServiceAccount sem token, ConfigMap, Deployment de uma réplica e Service ClusterIP OTLP. Kustomization independente, fora da raiz kubernetes; base-provision a aplica separadamente após os manifestos da base, reinicia o Deployment e aguarda rollout por até 300 segundos. Imagem Contrib 0.161.0, usuário 10001, filesystem somente leitura, recursos limitados, probes e debug basic sem conteúdo completo dos sinais. Os mesmos manifestos atendem hom/prd em clusters separados.
+
+A API mantém coleta desabilitada e o endereço do Service no manifesto. base-destroy remove e aguarda o Collector antes dos manifestos da base e do apply Terraform; falha bloqueia o descarte. [Validação local e operação](docs/COLLECTOR_API.md) documentam restart em cada provisionamento, aprovação do plano salvo e ordem de remoção. Workflows preparados e validados localmente; execução no EKS, capacidade do nó e New Relic permanecem pendentes. Nenhuma operação AWS foi executada nesta integração.
+
+## X-Ray nativo — preparação E5
+
+O [Gateway](docs/GATEWAY.md) recebe `xray_tracing_enabled=false` no Terraform e nos tfvars hom/prd; seus logs de acesso incluem somente o identificador técnico adicional xrayTraceId. O [bootstrap](bootstrap/README.md) prepara escrita X-Ray regional para as roles runtime auth e leitura da versão exata da layer Collector pelas pipelines auth. Service-linked role Gateway e permissões CI/Secrets são preservadas. Controles independentes do OpenTelemetry, sem ativação ou aplicação AWS; validação real e correlação continuam pendentes.

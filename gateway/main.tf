@@ -111,12 +111,13 @@ resource "aws_api_gateway_stage" "gateway" {
   stage_name            = var.environment
   variables             = { vpcLinkId = aws_apigatewayv2_vpc_link.api.id }
   cache_cluster_enabled = false
-  xray_tracing_enabled  = false
+  xray_tracing_enabled  = var.xray_tracing_enabled
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.access.arn
     format = jsonencode({
       requestId         = "$context.requestId"
       extendedRequestId = "$context.extendedRequestId"
+      xrayTraceId       = "$context.xrayTraceId"
       method            = "$context.httpMethod"
       route             = "$context.resourcePath"
       status            = "$context.status"

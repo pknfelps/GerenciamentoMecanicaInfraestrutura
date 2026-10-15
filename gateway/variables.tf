@@ -13,6 +13,11 @@ variable "aws_region" {
     error_message = "O projeto utiliza us-east-1."
   }
 }
+variable "xray_tracing_enabled" {
+  description = "Ativa o tracing nativo X-Ray no stage, independentemente do OpenTelemetry."
+  type        = bool
+  default     = false
+}
 variable "api_commit" {
   description = "SHA completo do contrato da API publicada e implantada."
   type        = string

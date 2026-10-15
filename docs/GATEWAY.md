@@ -36,7 +36,7 @@ O import usa overwrite e fail_on_warnings. O deployment muda pelo hash da defini
 
 SSM String/Standard em `/mecanica/<ambiente>/gateway/v2/`: rest-api-id, vpc-link-id, stage-name, endpoint, api-openapi-key, auth-openapi-key e auth-invocation-arn. São configuração, não prova de prontidão.
 
-Access log JSON em `/aws/apigateway/mecanica-<ambiente>-gateway`, retenção de sete dias: IDs, método, rota parametrizada, status, latência e tamanho da resposta. Sem corpo, documento, token, cabeçalhos, IP ou caminho contendo valores reais. Execution logs, data tracing, cache e X-Ray desabilitados; observabilidade completa permanece na E5. A role de logs e a configuração regional API Gateway pertencem ao bootstrap persistente.
+Access log JSON em `/aws/apigateway/mecanica-<ambiente>-gateway`, retenção de sete dias: IDs, `xrayTraceId` (`$context.xrayTraceId`), método, rota parametrizada, status, latência e tamanho da resposta. Sem corpo, documento, token, cabeçalhos, IP ou caminho contendo valores reais. Execution logs permanecem OFF, data tracing e cache desabilitados. O campo de correlação não comprova existência de segmento exportado. A role de logs e a configuração regional API Gateway pertencem ao bootstrap persistente.
 
 ## Validação
 
@@ -130,3 +130,13 @@ Plano salvo do bootstrap aplicado dentro da autorização de recuperação AWS: 
 A reconciliação foi feita por plan -destroy salvo e apply do mesmo plano, sem state rm, edição manual ou alterações reais: 0 added, 0 changed, 0 destroyed. Estado final sem recursos managed; EC2 sem interfaces de rede associadas ao SG sg-0a0169a0068e6f502. O descarte do Gateway hom está concluído. O workflow ainda pode ser executado novamente para registrar sucesso no GitHub, usando novo plano; não reutilizar o plano que falhou.
 
 Evidências em artifacts/bootstrap-gateway-vpc-link-read. Versionar a correção no bootstrap e estes registros. [Provider AWS 6.58.0: leitura e espera de exclusão](https://github.com/hashicorp/terraform-provider-aws/blob/v6.58.0/internal/service/apigatewayv2/vpc_link.go).
+
+## X-Ray nativo — preparação E5 de 15/10/2026
+
+A variável booleana `xray_tracing_enabled` controla somente o tracing nativo do stage. Seu padrão e os tfvars hom/prd são `false`. A ativação futura será versionada no tfvars e passará pelo plano salvo/aprovação/apply dos workflows existentes; nenhum input ou regra própria de amostragem foi acrescentado. Integrações, retenção e execução sem data tracing permanecem iguais.
+
+O bootstrap já declara a service-linked role `AWSServiceRoleForAPIGateway`, do serviço `ops.apigateway.amazonaws.com`. A policy gerenciada AWS dessa role já permite as operações X-Ray necessárias. Não foi criada outra role nem ampliada a pipeline Gateway. [Documentação oficial do tracing](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-enabling-xray.html) e [policy oficial](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/APIGatewayServiceRolePolicy.html).
+
+Na autenticação, `XRayEnabled` é independente de `TelemetryEnabled`: false usa PassThrough; true usa Active. Uma nova versão numérica precisa ser consumida em nova execução gateway-provision, pois a integração não acompanha o alias live. Ativar somente o Gateway não ativa os providers OpenTelemetry nem conecta os dois caminhos de traces.
+
+Sequência futura: revisar/aprovar/aplicar plano salvo do bootstrap → auth-publish de revisão nova → auth-provision com as duas opções explícitas → plano/aprovação/apply Gateway → conferir segmentos nativos com dados fictícios. Os segmentos nativos AWS não passam pela sanitização da aplicação; revisar seu conteúdo antes de uso normal. Correlação W3C/X-Ray, coleta CloudWatch, New Relic e comprovação real de amostragem/ausência de duplicação continuam pendentes. Esta entrega é local, sem plano AWS, aplicação ou ativação; E5.3/E5.14 permanecem abertas.

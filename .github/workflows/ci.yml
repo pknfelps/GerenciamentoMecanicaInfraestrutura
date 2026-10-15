@@ -34,3 +34,10 @@ jobs:
           terraform -chdir=gateway init -backend=false -lockfile=readonly
           terraform -chdir=gateway validate -no-color
           kubectl kustomize kubernetes
+          kubectl kustomize kubernetes/observability
+      - name: Validate API Collector configuration
+        run: >-
+          docker run --rm
+          --volume "$GITHUB_WORKSPACE/kubernetes/observability/collector.yaml:/etc/otelcol-contrib/collector.yaml:ro"
+          otel/opentelemetry-collector-contrib:0.161.0
+          validate --config=/etc/otelcol-contrib/collector.yaml
