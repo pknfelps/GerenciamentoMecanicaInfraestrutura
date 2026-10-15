@@ -133,7 +133,7 @@ Evidências em artifacts/bootstrap-gateway-vpc-link-read. Versionar a correção
 
 ## X-Ray nativo — preparação E5 de 15/10/2026
 
-A variável booleana `xray_tracing_enabled` controla somente o tracing nativo do stage. Seu padrão e os tfvars hom/prd são `false`. A ativação futura será versionada no tfvars e passará pelo plano salvo/aprovação/apply dos workflows existentes; nenhum input ou regra própria de amostragem foi acrescentado. Integrações, retenção e execução sem data tracing permanecem iguais.
+A variável booleana `xray_tracing_enabled` controla somente o tracing nativo do stage e mantém padrão false. O tfvars hom agora define true para a validação AWS; prd permanece false. A ativação é versionada no tfvars e passa pelo plano salvo/aprovação/apply dos workflows existentes, sem input na interface de gateway-provision. Alterar o arquivo não aplica a configuração na AWS; nenhum input ou regra própria de amostragem foi acrescentado. Integrações, retenção e execução sem data tracing permanecem iguais.
 
 O bootstrap já declara a service-linked role `AWSServiceRoleForAPIGateway`, do serviço `ops.apigateway.amazonaws.com`. A policy gerenciada AWS dessa role já permite as operações X-Ray necessárias. Não foi criada outra role nem ampliada a pipeline Gateway. [Documentação oficial do tracing](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-enabling-xray.html) e [policy oficial](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/APIGatewayServiceRolePolicy.html).
 
