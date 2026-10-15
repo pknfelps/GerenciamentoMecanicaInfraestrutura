@@ -62,7 +62,7 @@ kubectl get service otel-collector --namespace observability
 kubectl logs deployment/otel-collector --namespace observability --tail=40
 ```
 
-A API já terá o endpoint `http://otel-collector.observability.svc.cluster.local:4318` nos overlays hom/prd, mas **Telemetry__Enabled=false**. Instalar e conferir o Collector antes de habilitar a API em entrega posterior. Exportação não integra readiness nem transações da aplicação.
+A API declara o endpoint `http://otel-collector.observability.svc.cluster.local:4318` nos overlays hom/prd. O overlay hom agora usa **Telemetry__Enabled=true** para a validação AWS; prd continua false. A seleção é versionada no manifesto da API, sem input em api-deploy. Executar base-provision e conferir o Collector antes de api-deploy em hom. Exportação não integra readiness nem transações da aplicação.
 
 O ConfigMap não tem hash no nome. O Collector lê a configuração na inicialização; após mudança isolada de YAML, aplicar e reiniciar explicitamente:
 
