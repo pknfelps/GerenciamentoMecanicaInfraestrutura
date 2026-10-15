@@ -35,6 +35,13 @@ locals {
         Resource = "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/lambda/${var.project_name}-${environment}-auth:*"
       },
       {
+        Sid       = "WriteRegionalXRayTraces"
+        Effect    = "Allow"
+        Action    = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } }
+      },
+      {
         Sid       = "ManageLambdaInterfaces"
         Effect    = "Allow"
         Action    = local.auth_eni_actions

@@ -1,2 +1,3 @@
-environment = "hom"
-aws_region  = "us-east-1"
+environment          = "hom"
+aws_region           = "us-east-1"
+xray_tracing_enabled = false
