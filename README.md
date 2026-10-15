@@ -6,7 +6,7 @@ AWS deste repositório em Terraform; Service e namespace em manifestos Kubernete
 |---|---|
 | bootstrap | S3 estado/artefatos, ECR, OIDC, role/policy persistente auth-runtime e permissões das pipelines |
 | terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
-| kubernetes | Service NodePort e namespace database-init |
+| kubernetes | Service NodePort e namespace database-init; Collector preparado em Kustomization independente |
 | gateway | REST API Regional, VPC Link V2, integrações API/Lambda, logs e SSM próprios |
 
 Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP pendentes.
@@ -27,3 +27,9 @@ Provisionamento/destroy das unidades Terraform somente manuais: plan salvo → a
 Implementação local preparada; a migração AWS exige revisão/aprovação dos planos. Não descartar recursos para testar esta reformulação.
 
 Parte 6 da autenticacao: bootstrap prepara role CI de leitura exclusiva do pacote 1.0.0. Aplicacao exige plano salvo aprovado; workflows da funcao usam publicacao separada e provisionamento/destroy SAM manuais sem aprovacao intermediaria. sam delete remove ZIP atual/templates operacionais e preserva contratos, outras revisoes, bucket e IAM persistente. Consulte [bootstrap](bootstrap/README.md) e [procedimento auth](https://github.com/pknfelps/GerenciamentoMecanicaAutenticacao/blob/develop/docs/DEPLOY.md).
+
+## Collector da API — preparação E5
+
+[kubernetes/observability](kubernetes/observability/kustomization.yaml) contém Namespace, ServiceAccount sem token, ConfigMap, Deployment de uma réplica e Service ClusterIP OTLP. Kustomization independente, fora da raiz aplicada pelos workflows atuais. Imagem Contrib 0.161.0, usuário 10001, filesystem somente leitura, recursos limitados, probes e debug basic sem conteúdo completo dos sinais. Os mesmos manifestos atendem hom/prd em clusters separados.
+
+A API mantém coleta desabilitada e apenas prepara o endereço do Service. [Validação local e operação futura](docs/COLLECTOR_API.md) documentam comandos diretos, restart após alteração de configuração e ordem de remoção. Integração dos workflows, New Relic e validação no EKS permanecem pendentes; nenhum recurso AWS foi alterado.
