@@ -30,10 +30,14 @@ Parte 6 da autenticacao: bootstrap prepara role CI de leitura exclusiva do pacot
 
 ## Collector da API — preparação E5
 
-[kubernetes/observability](kubernetes/observability/kustomization.yaml) contém Namespace, ServiceAccount sem token, ConfigMap, Deployment de uma réplica e Service ClusterIP OTLP. Kustomization independente, fora da raiz kubernetes; base-provision a aplica separadamente após os manifestos da base, reinicia o Deployment e aguarda rollout por até 300 segundos. Imagem Contrib 0.161.0, usuário 10001, filesystem somente leitura, recursos limitados, probes e debug basic sem conteúdo completo dos sinais. Os mesmos manifestos atendem hom/prd em clusters separados.
-
-A API mantém coleta desabilitada e o endereço do Service no manifesto. base-destroy remove e aguarda o Collector antes dos manifestos da base e do apply Terraform; falha bloqueia o descarte. [Validação local e operação](docs/COLLECTOR_API.md) documentam restart em cada provisionamento, aprovação do plano salvo e ordem de remoção. Workflows preparados e validados localmente; execução no EKS, capacidade do nó e New Relic permanecem pendentes. Nenhuma operação AWS foi executada nesta integração.
+Collector Kubernetes administrado pela infraestrutura em kubernetes/observability/base, com overlays hom/prd. base-provision sempre aplica o overlay do ambiente, reinicia e aguarda rollout; base-destroy remove o mesmo overlay antes do EKS. O destino de produção é sempre New Relic; credencial no Secrets Manager e bootstrap aplicado são pré-requisitos. A API envia ao endpoint OTLP interno e mantém sua ativação no manifesto (hom habilitado; prd ainda conforme sua configuração versionada). Não há chave New Relic na aplicação.
 
 ## X-Ray nativo — preparação E5
 
 O [Gateway](docs/GATEWAY.md) mantém `xray_tracing_enabled=false` como padrão Terraform; o tfvars hom define true para a validação AWS e prd continua false; seus logs de acesso incluem somente o identificador técnico adicional xrayTraceId. O [bootstrap](bootstrap/README.md) prepara escrita X-Ray regional para as roles runtime auth e leitura da versão exata da layer Collector pelas pipelines auth. Service-linked role Gateway e permissões CI/Secrets são preservadas. Controles independentes do OpenTelemetry. Permissões do bootstrap já aprovadas/aplicadas; ativação do stage depende de novo plano/aprovação/apply Gateway. Validação real e correlação continuam pendentes.
+
+## New Relic US — preparação local
+
+Os três sinais são enviados por OTLP com leitura nativa de Secret persistente. Não há toggle de destino nos workflows. Bootstrap/IAM e cadastro manual da chave de cada ambiente são pré-requisitos; a pipeline só inspeciona metadados. [Cadastro, sequência, rotação, testes e limites](docs/NEW_RELIC.md). A ingestão real ainda depende de validação posterior.
+
+A integração nativa **X-Ray → New Relic** também está preparada no bootstrap: role de leitura persistente, confiança na conta New Relic US com ExternalId obrigatório e restrição regional. Informar o Account ID New Relic antes do próximo plano; conexão manual no console somente após apply aprovado. Não usa License Key/Collectors nem comprova correlação W3C. [Procedimento](docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa).

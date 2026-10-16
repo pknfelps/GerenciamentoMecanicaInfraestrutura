@@ -4,6 +4,12 @@ locals {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid      = "InspectNewRelicCredential"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+        Resource = aws_secretsmanager_secret.newrelic[environment].arn
+      },
+      {
         Sid    = "ManageFunction"
         Effect = "Allow"
         Action = [

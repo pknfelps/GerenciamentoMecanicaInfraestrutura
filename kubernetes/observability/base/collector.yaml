@@ -1,13 +1,11 @@
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
-
 receivers:
   otlp:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
-
 processors:
   memory_limiter:
     check_interval: 1s
@@ -17,24 +15,34 @@ processors:
     timeout: 1s
     send_batch_size: 512
     send_batch_max_size: 512
-
 exporters:
-  debug:
-    verbosity: basic
-
+  otlphttp/newrelic:
+    endpoint: https://otlp.nr-data.net
+    headers:
+      api-key: ${secretsmanager:${env:NEW_RELIC_LICENSE_KEY_SECRET}}
+    compression: gzip
+    timeout: 3s
+    sending_queue:
+      enabled: true
+      queue_size: 100
+      num_consumers: 2
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 15s
 service:
   extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [otlphttp/newrelic]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [otlphttp/newrelic]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
-
+      exporters: [otlphttp/newrelic]
