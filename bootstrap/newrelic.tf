@@ -17,7 +17,7 @@ locals {
       {
         Sid      = "InspectNewRelicCredential"
         Effect   = "Allow"
-        Action   = ["secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+        Action   = ["secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy", "secretsmanager:ListSecretVersionIds"]
         Resource = aws_secretsmanager_secret.newrelic[environment].arn
       },
       {

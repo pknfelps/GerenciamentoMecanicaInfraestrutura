@@ -82,7 +82,7 @@ O delete inclui o namespace e seus recursos. O namespace pertence a esta unidade
 
 ## Pendências
 
-Execução dos workflows na AWS, ativação, New Relic/credencial do exporter, enriquecimento/métricas Kubernetes, CloudWatch/X-Ray e avaliação de consumo no EKS continuam pendentes. O CI já renderiza ambas as Kustomizations e valida o YAML com o comando nativo da imagem Contrib 0.161.0. Os manifestos não criam chaves, destinos fictícios ou permissões antecipadas. O SDK permanece responsável pela sanitização antes de exportar. E5.1–E5.3 continuam parciais.
+Execução dos workflows na AWS, ativação, New Relic/credencial do exporter, enriquecimento/métricas Kubernetes, CloudWatch/X-Ray e avaliação de consumo no EKS continuam pendentes. O CI mantém a renderização das Kustomizations, mas a validação pela imagem Contrib e os testes de conexão dos Collectors foram removidos por decisão do mantenedor. A conferência operacional ocorre após deploy; registros de testes anteriores são históricos. Os manifestos não criam chaves, destinos fictícios ou permissões antecipadas. O SDK permanece responsável pela sanitização antes de exportar. E5.1–E5.3 continuam parciais.
 
 
 ## Resultado local — 15/10/2026

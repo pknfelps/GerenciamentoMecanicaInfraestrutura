@@ -36,10 +36,3 @@ jobs:
           kubectl kustomize kubernetes
           kubectl kustomize kubernetes/observability/hom
           kubectl kustomize kubernetes/observability/prd
-      - name: Validate New Relic exporter without AWS credentials
-        run: >-
-          docker run --rm
-          --volume "$GITHUB_WORKSPACE/kubernetes/observability/base/collector.yaml:/etc/collector.yaml:ro"
-          otel/opentelemetry-collector-contrib:0.161.0
-          validate --config=/etc/collector.yaml
-          '--config=yaml:exporters::otlphttp/newrelic::headers::api-key: local-test-license'
