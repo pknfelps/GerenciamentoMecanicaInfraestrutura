@@ -29,6 +29,12 @@ locals {
         Condition = { StringEquals = { "secretsmanager:VersionStage" = "AWSCURRENT" } }
       },
       {
+        Sid      = "ReadNewRelicLicenseKey"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.newrelic[environment].arn
+      },
+      {
         Sid      = "WriteFunctionLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]

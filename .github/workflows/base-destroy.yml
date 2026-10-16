@@ -117,7 +117,7 @@ jobs:
       - name: Configure Kubernetes access
         run: aws eks update-kubeconfig --region us-east-1 --name "mecanica-$TARGET_ENVIRONMENT-eks"
       - name: Remove API Collector
-        run: kubectl delete -k kubernetes/observability --ignore-not-found=true --cascade=foreground --wait=true --timeout=300s
+        run: kubectl delete -k "kubernetes/observability/$TARGET_ENVIRONMENT" --ignore-not-found=true --cascade=foreground --wait=true --timeout=300s
       - name: Remove base Kubernetes manifests
         run: kubectl delete -k kubernetes --ignore-not-found=true --wait=true
       - name: Apply approved plan

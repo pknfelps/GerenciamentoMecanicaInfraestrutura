@@ -34,10 +34,12 @@ jobs:
           terraform -chdir=gateway init -backend=false -lockfile=readonly
           terraform -chdir=gateway validate -no-color
           kubectl kustomize kubernetes
-          kubectl kustomize kubernetes/observability
-      - name: Validate API Collector configuration
+          kubectl kustomize kubernetes/observability/hom
+          kubectl kustomize kubernetes/observability/prd
+      - name: Validate New Relic exporter without AWS credentials
         run: >-
           docker run --rm
-          --volume "$GITHUB_WORKSPACE/kubernetes/observability/collector.yaml:/etc/otelcol-contrib/collector.yaml:ro"
+          --volume "$GITHUB_WORKSPACE/kubernetes/observability/base/collector.yaml:/etc/collector.yaml:ro"
           otel/opentelemetry-collector-contrib:0.161.0
-          validate --config=/etc/otelcol-contrib/collector.yaml
+          validate --config=/etc/collector.yaml
+          '--config=yaml:exporters::otlphttp/newrelic::headers::api-key: local-test-license'
