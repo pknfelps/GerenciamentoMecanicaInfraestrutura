@@ -56,9 +56,9 @@ Lambda preserva memory_limiter 64/16 MiB e usa decouple por último, fila máxim
 
 Para trocar a chave: cadastrar a nova versão no console, manter AWSCURRENT e reiniciar o Collector Kubernetes; publicar/provisionar uma nova revisão numérica da Lambda e atualizar o Gateway. Alterar só o valor do Secret não atualiza processos existentes. Não revogar a chave anterior antes de comprovar os novos consumidores.
 
-Terraform fmt/init sem backend/validate e Kustomize validam arquivos. CI dos Collectors usa override nativo de api-key com valor fictício; nenhum Secret AWS é lido. Fixtures .NET usam destino OTLP local real, verificando headers, payloads, três sinais, sanitização e falhas 401/429/503/lentidão/indisponibilidade.
+Terraform fmt/init sem backend/validate, renderização Kustomize e validação SAM/workflows continuam conferindo a estrutura dos arquivos. Por decisão do mantenedor, foram removidos os testes .NET de conexão com New Relic e Collectors locais, os receptores HTTP fictícios e os steps CI que executavam as imagens para validar o exporter/YAML. Não substituir os cenários por testes ignorados ou mocks novos.
 
-A imagem Contrib 0.151.0 não contém decouple, embora a layer oficial o inclua. Para testar SOMENTE transporte, os overrides nativos removem processors na fixture Contrib; o teste local Compose continua cobrindo o fluxo diagnóstico. O CI identifica esse limite explicitamente. Essa comprovação não valida ciclo/fila do decouple nem congelamento da extensão: esses cenários permanecem para AWS. Não há substituição no YAML empacotado em produção.
+A imagem Contrib 0.151.0 não contém decouple; a layer oficial continua usando esse processor no YAML de produção. Não há overrides de teste ou prova automatizada de transporte. Ingestão, falhas de exportação, ciclo/fila/congelamento e comportamento dos Collectors serão conferidos operacionalmente na AWS. Testes funcionais e de instrumentação/sanitização InMemory permanecem.
 
 Não acrescentados scripts, Operators, agentes, coleta stdout ou duplicação dos exporters. Somente o Compose/local de teste mantém debug, sem AWS/New Relic. Os deploys usam exclusivamente New Relic. Próximas entregas: ingestão comprovada, dashboards/alertas, coleta Kubernetes/CloudWatch e integração X-Ray/New Relic/correlação W3C.
 

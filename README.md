@@ -11,7 +11,7 @@ AWS deste repositório em Terraform; Service e namespace em manifestos Kubernete
 
 Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP pendentes.
 
-CI: `terraform fmt -check`, `init -backend=false`, `validate`, renderização das Kustomizations da base/Collector e validação nativa do YAML com Contrib 0.161.0. Não há testes operacionais próprios; testes de negócio vivem nos repositórios das aplicações.
+CI: `terraform fmt -check`, `init -backend=false`, `validate`, renderização das Kustomizations da base/Collector. Não executa testes de Collectors ou conexão New Relic. Não há testes operacionais próprios; testes de negócio vivem nos repositórios das aplicações.
 
 Provisionamento/destroy das unidades Terraform somente manuais: plan salvo → aprovação hom-approval/prd-approval → apply do mesmo artefato/commit. Nenhum apply por push ou replan após aprovação. O mantenedor deve coordenar alterações sequenciais por ambiente e gerar novo plano dos consumidores quando mudar uma dependência.
 
