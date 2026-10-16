@@ -61,3 +61,8 @@ output "github_environment_variables" {
     }
   }
 }
+
+output "newrelic_xray_role_arn" {
+  description = "ARN persistente a conectar manualmente em Infrastructure > AWS no New Relic US, somente para X-Ray."
+  value       = aws_iam_role.newrelic_xray.arn
+}

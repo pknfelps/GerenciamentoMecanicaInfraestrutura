@@ -39,3 +39,5 @@ O [Gateway](docs/GATEWAY.md) mantém `xray_tracing_enabled=false` como padrão T
 ## New Relic US — preparação local
 
 Os três sinais são enviados por OTLP com leitura nativa de Secret persistente. Não há toggle de destino nos workflows. Bootstrap/IAM e cadastro manual da chave de cada ambiente são pré-requisitos; a pipeline só inspeciona metadados. [Cadastro, sequência, rotação, testes e limites](docs/NEW_RELIC.md). A ingestão real ainda depende de validação posterior.
+
+A integração nativa **X-Ray → New Relic** também está preparada no bootstrap: role de leitura persistente, confiança na conta New Relic US com ExternalId obrigatório e restrição regional. Informar o Account ID New Relic antes do próximo plano; conexão manual no console somente após apply aprovado. Não usa License Key/Collectors nem comprova correlação W3C. [Procedimento](docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa).

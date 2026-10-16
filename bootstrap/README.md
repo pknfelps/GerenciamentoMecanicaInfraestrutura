@@ -12,6 +12,8 @@ Mantém estados S3 versionados/locking, artefatos imutáveis, ECR, OIDC e permis
 
 Usar Terraform 1.15.9, provider lock versionado, credencial administrativa autenticada na conta 121754142617/us-east-1. Preservar backend.hcl/backend.s3.tf e bootstrap.tfvars locais existentes; não versionar estado, planos ou credenciais. O exemplo de tfvars documenta inputs não secretos.
 
+O bootstrap agora exige também `new_relic_account_id`: preencher o Account ID real do New Relic no tfvars local antes do próximo plan. A variável só configura a confiança da integração X-Ray; não recebe a License Key.
+
 ```powershell
 terraform init -backend-config=backend.hcl -lockfile=readonly
 terraform fmt -check
@@ -179,3 +181,13 @@ newrelic.tf cria somente metadados /mecanica/<ambiente>/observability/newrelic-l
 Bootstrap amplia auth-runtime para ler somente o Secret do ambiente; pipelines base/auth recebem somente DescribeSecret/ListSecretVersionIds. A base recebe permissão de administrar sua collector-runtime/Pod Identity; a role e associação são recursos da base, não deste bootstrap. O provider nativo omite VersionStage, utilizando AWSCURRENT por padrão; a nova permissão de leitura não exige o campo explícito. Os acessos anteriores não são removidos. [Cadastro e isolamento](../docs/NEW_RELIC.md).
 
 Não executar destroy do bootstrap como teste: os Secrets e demais recursos persistentes possuem proteção contra exclusão. Esta entrega não gerou nem aplicou plano AWS; precisa de nova aprovação posterior.
+
+## Leitura X-Ray pelo New Relic — preparação local
+
+`newrelic-xray.tf` acrescenta somente `mecanica-newrelic-xray` (path `/mecanica/observability/`) e sua policy inline `read-regional-xray`. Role persistente do bootstrap, compartilhada pela conta/região; descartes dos ambientes não a removem. Principal AWS exclusivo da conta New Relic US `754728514883`, `sts:AssumeRole` condicionado a `sts:ExternalId=var.new_relic_account_id`. Leitura limitada a `xray:Get*`/`xray:BatchGet*`, Resource `*` exigido pelas consultas e condição regional us-east-1. Sem ReadOnlyAccess, Budgets, CloudWatch, Secrets ou escrita.
+
+Antes de qualquer novo plan do bootstrap, preencher a variável obrigatória `new_relic_account_id` no tfvars local: Account ID real do New Relic US, numérico positivo, sem default e sem relação com a License Key. O exemplo apresenta somente formato fictício comentado; nenhum valor real foi inferido ou cadastrado. Backend, provider/lockfile e demais recursos preservados. Revisar/aprovar novo plano salvo; mudança isolada deve criar apenas role e policy inline, sem alterações/exclusões existentes. Nenhum plano AWS ou apply nesta implementação.
+
+Após o apply aprovado, `terraform output -raw newrelic_xray_role_arn` fornece o ARN para conexão manual `mecanica-xray` em Infrastructure → AWS. Habilitar somente X-Ray/us-east-1/polling cinco minutos. Não criar role pelo console ou ampliar permissões para seguir o tutorial genérico. Leitura alcança traces de hom/prd nessa região; não há isolamento por tags/função. [Procedimento, NRQL, sequência e limites](../docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa). Ingestão real/correlação W3C continuam pendentes; não mudar C#, SAM, Collectors ou workflows.
+
+Validação local concluída: Terraform 1.15.9/AWS 6.58.0, fmt -check, init -backend=false com provider em cache e validate aprovados. JSON gerado pelo terraform console revisado com Account ID fictício 1234567: trust 220 e policy 208 caracteres. Inputs vazio, zero, negativo e não numérico produziram o diagnóstico esperado de validação; valor positivo aceito. Console pode retornar código zero mesmo emitindo esse diagnóstico, por isso a conferência considerou a mensagem nativa. Evidências locais em artifacts/e5-xray-newrelic/validation.json e policies-fictitious-account.json; nenhum teste operacional/script novo, chamada AWS, plano ou apply.

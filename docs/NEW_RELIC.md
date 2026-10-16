@@ -61,3 +61,48 @@ Terraform fmt/init sem backend/validate e Kustomize validam arquivos. CI dos Col
 A imagem Contrib 0.151.0 não contém decouple, embora a layer oficial o inclua. Para testar SOMENTE transporte, os overrides nativos removem processors na fixture Contrib; o teste local Compose continua cobrindo o fluxo diagnóstico. O CI identifica esse limite explicitamente. Essa comprovação não valida ciclo/fila do decouple nem congelamento da extensão: esses cenários permanecem para AWS. Não há substituição no YAML empacotado em produção.
 
 Não acrescentados scripts, Operators, agentes, coleta stdout ou duplicação dos exporters. Somente o Compose/local de teste mantém debug, sem AWS/New Relic. Os deploys usam exclusivamente New Relic. Próximas entregas: ingestão comprovada, dashboards/alertas, coleta Kubernetes/CloudWatch e integração X-Ray/New Relic/correlação W3C.
+
+## X-Ray nativo → New Relic — preparação declarativa
+
+Implementação local de 15/10/2026; plano AWS, apply, conexão e ingestão desta integração ainda pendentes. Este caminho é independente do OTLP: o New Relic assume uma role AWS e consulta o X-Ray diretamente. Não passa pelos Collectors, não usa a License Key e não exige User API Key ou provider New Relic.
+
+### Bootstrap e alcance do acesso
+
+`bootstrap/newrelic-xray.tf` declara a role persistente `mecanica-newrelic-xray`, no path `/mecanica/observability/`, e a policy inline `read-regional-xray`. A confiança permite apenas `sts:AssumeRole` pela conta New Relic US `754728514883`, com `sts:ExternalId` exatamente igual a `new_relic_account_id`.
+
+Antes do próximo plano administrativo, informar em `bootstrap.tfvars` o **Account ID do New Relic**, como string numérica positiva. A variável é obrigatória, sem default; o exemplo contém somente um formato fictício comentado. Esse identificador não é secreto. Não alterar o backend nem reutilizar planos anteriores à nova role.
+
+A policy concede somente `xray:Get*` e `xray:BatchGet*`, com `Resource="*"` e `aws:RequestedRegion=us-east-1`. As consultas de traces não aceitam ARN por função/Gateway nem isolamento por ambiente. A role pode ler os traces disponíveis da conta AWS 121754142617 nessa região, inclusive hom/prd quando existirem; filtros do console não são controle de acesso IAM. Não anexar ReadOnlyAccess, Budgets, permissões CloudWatch, Secrets, escrita X-Ray ou administração de outros recursos. A role pertence ao bootstrap compartilhado e permanece após destroy de Gateway, auth, banco ou base.
+
+### Sequência após autorização
+
+1. Preencher `new_relic_account_id`; gerar o plano salvo do bootstrap e revisar. O esperado para esta entrega isolada é somente duas criações (role e policy inline), nenhuma alteração/exclusão de recursos existentes e o novo output `newrelic_xray_role_arn`. Se houver outras mudanças, revisá-las antes de aprovar.
+2. Aplicar somente o binário aprovado, conferir trust/policy implantadas e obter o ARN com `terraform output -raw newrelic_xray_role_arn`. Não criar outra role manualmente.
+3. No New Relic US, acessar **All capabilities → Infrastructure → AWS**, iniciar a conexão de API polling e usar o nome `mecanica-xray` e o ARN do output. O External ID será o Account ID dessa mesma conta New Relic. Usar a role personalizada existente; não seguir as opções de anexar ReadOnlyAccess ou Budgets do tutorial genérico.
+4. Em **Manage services**, habilitar somente **AWS X-Ray**, limitar a `us-east-1` e manter polling em cinco minutos. Não habilitar EC2/EBS, outros serviços ou coleta adicional de tags/IPs. Não fornecer a License Key ou credenciais AWS permanentes. Se a interface ou a verificação exigir permissão além da policy aprovada, registrar o requisito e revisar antes de ampliar o acesso.
+5. Para a comprovação em hom, executar `auth-provision` com `xray_enabled=true` e atualizar o Gateway para a nova versão numérica da função. Se for necessária publicação nova, usar `auth-publish` antes. O tfvars hom do Gateway já solicita X-Ray habilitado; mudanças de stage seguem seu plano/aprovação/apply. Prd permanece desabilitado. API e Collectors não exigem alteração por causa dessa integração.
+6. Gerar chamadas controladas, com dados fictícios, incluindo sucesso e erros esperados. Conferir segmentos Gateway/Lambda, vínculos nativos e `xrayTraceId` dos access logs, além da amostragem efetiva. Não presumir que toda chamada foi amostrada e não adicionar regras próprias nesta entrega.
+7. Aguardar a consulta da integração e executar no New Relic:
+
+```sql
+SELECT count(*)
+FROM Span
+WHERE newRelic.ingestPoint = 'xray.polling'
+SINCE 30 minutes ago
+```
+
+Conferir serviço/região, IDs dos traces, horários e atraso observado com os segmentos AWS. O polling padrão é de cinco minutos e a primeira ingestão pode levar até vinte minutos. São coletados traces concluídos; spans com mais de vinte minutos são descartados. Não usar esse caminho para alertas imediatos nem configurar polling superior a cinco minutos.
+
+### Critérios, falhas e pendências
+
+- Conferir ausência de acesso com ExternalId ausente/incorreto ou principal diferente, usando revisão da trust e, posteriormente, as verificações autorizadas da integração. Não enfraquecer a confiança para contornar uma falha de conexão.
+- Conferir que a policy permite leitura X-Ray em us-east-1 e não permite outra região, escrita X-Ray ou leitura de Secrets. Access Analyzer/simulação IAM ficarão para a etapa AWS autorizada; não criar scripts de teste.
+- Segmentos nativos AWS não passam pela sanitização da API/Lambda e podem conter URL/IP. Inspecionar amostras fictícias antes de registrar a comprovação; não despejar documentos completos de traces em logs ou relatórios.
+- O marcador `newRelic.ingestPoint='xray.polling'` distingue este caminho do OTLP. A habilitação não adiciona exporter X-Ray aos Collectors nem duplica o envio OTLP existente. A união dos dois contextos e a análise de possíveis sobreposições permanecem pendentes.
+- Falha na integração não altera o fluxo de negócio nem o envio OTLP. Em ausência de spans, conferir conexão, região, permissão, tracing/amostragem nativa e janela de polling; não habilitar outros serviços nem imprimir credenciais como diagnóstico.
+
+**Limite desta entrega:** configuração e procedimento preparados localmente. E5.3/E5.14 continuam parciais: aplicação, ingestão real, conteúdo dos segmentos e correlação W3C/X-Ray precisam ser comprovados; receiver CloudWatch, dashboards e alertas ficam separados. A instrumentação atual continua W3C e mantém extração X-Ray desabilitada. Não executar destroy como teste.
+
+Referências oficiais: [conexão AWS por polling](https://docs.newrelic.com/docs/infrastructure/amazon-integrations/connect/set-up-aws-api-polling/), [integração X-Ray](https://docs.newrelic.com/docs/infrastructure/amazon-integrations/aws-integrations-list/aws-x-ray-monitoring-integration/) e [ações/recursos IAM X-Ray](https://docs.aws.amazon.com/service-authorization/latest/reference/list_xray.html).
+
+Validação local concluída: Terraform 1.15.9/AWS 6.58.0, fmt -check, init -backend=false com provider em cache e validate aprovados. JSON gerado pelo terraform console revisado com Account ID fictício 1234567: trust 220 e policy 208 caracteres. Inputs vazio, zero, negativo e não numérico produziram o diagnóstico esperado de validação; valor positivo aceito. Console pode retornar código zero mesmo emitindo esse diagnóstico, por isso a conferência considerou a mensagem nativa. Evidências locais em artifacts/e5-xray-newrelic/validation.json e policies-fictitious-account.json; nenhum teste operacional/script novo, chamada AWS, plano ou apply.

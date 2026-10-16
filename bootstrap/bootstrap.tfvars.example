@@ -15,3 +15,8 @@ github_subject_prefixes = {
 # A consulta de 2026-09-22 não encontrou providers OIDC na conta.
 # Se outro estado criar o provider antes deste apply, informar seu ARN e conferir audience:
 # existing_github_oidc_provider_arn = "arn:aws:iam::121754142617:oidc-provider/token.actions.githubusercontent.com"
+
+# Obrigatório: copiar o Account ID real da conta New Relic US para bootstrap.tfvars.
+# Identificador público, usado como ExternalId; não usar a conta AWS ou a License Key.
+# Exemplo fictício de formato (substituir pelo valor real antes de plan):
+# new_relic_account_id = "1234567"
