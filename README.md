@@ -41,3 +41,9 @@ O [Gateway](docs/GATEWAY.md) mantém `xray_tracing_enabled=false` como padrão T
 Os três sinais são enviados por OTLP com leitura nativa de Secret persistente. Não há toggle de destino nos workflows. Bootstrap/IAM e cadastro manual da chave de cada ambiente são pré-requisitos; a pipeline só inspeciona metadados. [Cadastro, sequência, rotação, testes e limites](docs/NEW_RELIC.md). A ingestão real ainda depende de validação posterior.
 
 A integração nativa **X-Ray → New Relic** também está preparada no bootstrap: role de leitura persistente, confiança na conta New Relic US com ExternalId obrigatório e restrição regional. Informar o Account ID New Relic antes do próximo plano; conexão manual no console somente após apply aprovado. Não usa License Key/Collectors nem comprova correlação W3C. [Procedimento](docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa).
+
+## Bloqueios de destroy — 17/10/2026
+
+base-destroy verifica somente o banco antes do plan e novamente antes de remover qualquer manifesto ou aplicar o plano salvo. RDS em deleting, DB subnet group ou SG do banco bloqueiam imediatamente. API/auth são verificadas pelo database-destroy; Gateway é verificado pelos destroys de API/auth. Falhas de consulta bloqueiam. Gateway destroy permanece inalterado.
+
+O bootstrap prepara policies gerenciadas de inspeção para base/API/auth/banco hom/prd e a autorização da base para associar AmazonEKSViewPolicy à pipeline do banco somente em default. A base declara essa associação separada do acesso Edit em database-init. Aplicar bootstrap e base antes de usar os workflows novos. [Procedimento](docs/PIPELINES_BASE.md). Sem aplicação AWS nesta implementação.

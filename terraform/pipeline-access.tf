@@ -36,3 +36,15 @@ resource "aws_eks_access_policy_association" "pipeline" {
     namespaces = each.value.scope == "namespace" ? (each.key == "database" ? ["database-init"] : ["default"]) : null
   }
 }
+
+# O banco inspeciona a ausencia da API antes do destroy, sem editar default ou ler Secrets.
+resource "aws_eks_access_policy_association" "database_api_view" {
+  cluster_name  = aws_eks_access_entry.pipeline["database"].cluster_name
+  principal_arn = aws_eks_access_entry.pipeline["database"].principal_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+
+  access_scope {
+    type       = "namespace"
+    namespaces = ["default"]
+  }
+}

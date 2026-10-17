@@ -21,3 +21,13 @@ Gateway fica separado da base: gateway-provision/gateway-destroy manuais, com en
 ## Destino New Relic
 
 base-provision sempre exige Secret persistente do ambiente com AWSCURRENT (inspeção antes do plan e novamente antes do apply), aplica kubernetes/observability/<ambiente> e mantém restart/rollout e apply exclusivo do plano aprovado. Sem input de ativação/destino. base-destroy remove o mesmo overlay; CI renderiza hom/prd e valida o único exporter de produção com chave fictícia, sem AWS. [Procedimento completo](NEW_RELIC.md).
+
+## Bloqueios de dependência no destroy — 17/10/2026
+
+base-destroy consulta somente sua dependência direta, o banco, antes do plan e novamente no apply, antes de excluir Collector/manifestos. Exige ausência de RDS, DB subnet group e SG do banco, inclusive recursos em exclusão. Não repete as consultas de API/auth/Gateway: database-destroy verifica API/auth, e os destroys de API/auth verificam Gateway.
+
+O job plan da base não precisa de kubectl para essa checagem. O job apply preserva kubectl para remover seus próprios manifestos depois de checar o banco. Esta entrega não recupera automaticamente Terraform/Kubernetes quando EKS/SSM já foram removidos.
+
+Todas as checagens usam set -euo pipefail, JSON, paginação automática e nomes exatos hom/prd. Consulta negada, falha de rede ou parsing inválido interrompe o fluxo, sem inferir ausência. Recursos do banco em exclusão continuam bloqueando. Nenhuma espera automática ou rollback; concluir database-destroy antes de repetir.
+
+Publicação: revisar/aplicar plano adicional do bootstrap, aplicar base com associação AmazonEKSViewPolicy em default para database, publicar os workflows e então usá-los. Preservados revisão/aprovação, artefatos, mesma revisão e apply do plano salvo. gateway-destroy não muda. Não ler estados externos, gravar prontidão no SSM nem executar destroy como teste desta implementação.
