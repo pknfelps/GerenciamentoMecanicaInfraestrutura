@@ -12,7 +12,7 @@ Não há plan depois da aprovação. Estado alterado invalida o plano pelo Terra
 
 base-destroy executa plan -destroy salvo, approval e apply; antes do apply configura kubeconfig isolado, remove kubernetes/observability/<ambiente> com espera/cascade foreground/timeout de 300 segundos e, depois, os manifestos Kubernetes da base. Recursos já ausentes são tolerados; falhas reais de remoção interrompem o job e impedem o apply Terraform. Não forçar finalizadores nem ignorar erros. Consumidores e banco já devem estar descartados, inclusive ConfigMap/Secrets/Job do namespace reservado. Se o EKS já foi removido fora deste fluxo, não ignore a falha: revise o estado/configuração e prepare um procedimento de recuperação explicitamente aprovado.
 
-CI de PR e manual executa fmt/validate, Kustomize da raiz e do Collector, além de validar o YAML com docker run da imagem Contrib 0.161.0; não provisiona. A role base já possui acesso administrativo ao EKS, sem ampliar permissões da API. Instalar o Collector não ativa Telemetry__Enabled nos manifestos da API. aws-oidc-check é diagnóstico manual STS, sem escrever evidência SSM. [Migração](MIGRACAO_DECLARATIVA.md) deve preceder a primeira execução nova; não usar destroy para testar.
+CI de PR e manual executa fmt/validate e Kustomize da raiz e dos overlays do Collector; não provisiona nem executa testes de telemetria ou imagens Collector. A role base já possui acesso administrativo ao EKS, sem ampliar permissões da API. Instalar o Collector não ativa Telemetry__Enabled nos manifestos da API. aws-oidc-check é diagnóstico manual STS, sem escrever evidência SSM. [Migração](MIGRACAO_DECLARATIVA.md) deve preceder a primeira execução nova; não usar destroy para testar.
 
 ## Workflows Gateway
 
@@ -20,7 +20,7 @@ Gateway fica separado da base: gateway-provision/gateway-destroy manuais, com en
 
 ## Destino New Relic
 
-base-provision sempre exige Secret persistente do ambiente com AWSCURRENT (inspeção antes do plan e novamente antes do apply), aplica kubernetes/observability/<ambiente> e mantém restart/rollout e apply exclusivo do plano aprovado. Sem input de ativação/destino. base-destroy remove o mesmo overlay; CI renderiza hom/prd e valida o único exporter de produção com chave fictícia, sem AWS. [Procedimento completo](NEW_RELIC.md).
+base-provision sempre exige Secret persistente do ambiente com AWSCURRENT (inspeção antes do plan e novamente antes do apply), aplica kubernetes/observability/<ambiente> e mantém restart/rollout e apply exclusivo do plano aprovado. Sem input de ativação/destino. base-destroy remove o mesmo overlay; CI renderiza hom/prd; a validação nativa do YAML é uma conferência local, sem novo step de workflow. [Procedimento completo](NEW_RELIC.md).
 
 ## Bloqueios de dependência no destroy — 17/10/2026
 
@@ -31,3 +31,9 @@ O job plan da base não precisa de kubectl para essa checagem. O job apply prese
 Todas as checagens usam set -euo pipefail, JSON, paginação automática e nomes exatos hom/prd. Consulta negada, falha de rede ou parsing inválido interrompe o fluxo, sem inferir ausência. Recursos do banco em exclusão continuam bloqueando. Nenhuma espera automática ou rollback; concluir database-destroy antes de repetir.
 
 Publicação: revisar/aplicar plano adicional do bootstrap, aplicar base com associação AmazonEKSViewPolicy em default para database, publicar os workflows e então usá-los. Preservados revisão/aprovação, artefatos, mesma revisão e apply do plano salvo. gateway-destroy não muda. Não ler estados externos, gravar prontidão no SSM nem executar destroy como teste desta implementação.
+
+## Coleta Kubernetes — 17/10/2026
+
+Os overlays observability/hom e prd incluem ClusterRole/ClusterRoleBinding, habilitação de token somente no pod, Downward API e identificação por cluster/ambiente. A aplicação/restart/espera e remoção existentes abrangem esses recursos sem modificar workflows ou permissões IAM. RBAC de escopo de cluster também é removido pelo delete do overlay; não basta apagar o namespace isoladamente.
+
+Após o PR, executar base-provision e conferir coleta, RBAC/TLS, consumo e dados no New Relic conforme [Collector API](COLLECTOR_API.md). Não é necessário deploy dos consumidores. Instalação e saúde do processo não comprovam ingestão nem tornam E5.4/E5.12 concluídas.

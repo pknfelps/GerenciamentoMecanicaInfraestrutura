@@ -1,15 +1,15 @@
 # Gerenciamento Mecanica — Infraestrutura
 
-AWS deste repositório em Terraform; Service e namespace em manifestos Kubernetes próprios. Auth usa SAM/CloudFormation com ZIP ([ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md)), template/workflows validados localmente e implantação pendente. Bootstrap/base/banco/Gateway permanecem Terraform, incluindo IAM runtime/CI persistentes. Sem wrappers/publicadores/controller. [Decisão](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/008-INFRAESTRUTURA-DECLARATIVA.md).
+AWS deste repositório em Terraform; Service e namespace em manifestos Kubernetes próprios. Auth usa SAM/CloudFormation com ZIP ([ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md)), template/workflows implantados e fluxo validado em hom. Bootstrap/base/banco/Gateway permanecem Terraform, incluindo IAM runtime/CI persistentes. Sem wrappers/publicadores/controller. [Decisão](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/008-INFRAESTRUTURA-DECLARATIVA.md).
 
 | Unidade | Conteúdo |
 |---|---|
 | bootstrap | S3 estado/artefatos, ECR, OIDC, role/policy persistente auth-runtime e permissões das pipelines |
 | terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
-| kubernetes | Service NodePort e namespace database-init; Collector preparado em Kustomization independente |
+| kubernetes | Service NodePort e namespace database-init; Collector New Relic e coleta Kubernetes em Kustomization independente |
 | gateway | REST API Regional, VPC Link V2, integrações API/Lambda, logs e SSM próprios |
 
-Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP pendentes.
+Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP comprovadas em hom em 17/10/2026; prd não validado.
 
 CI: `terraform fmt -check`, `init -backend=false`, `validate`, renderização das Kustomizations da base/Collector. Não executa testes de Collectors ou conexão New Relic. Não há testes operacionais próprios; testes de negócio vivem nos repositórios das aplicações.
 
@@ -28,19 +28,21 @@ Implementação local preparada; a migração AWS exige revisão/aprovação dos
 
 Parte 6 da autenticacao: bootstrap prepara role CI de leitura exclusiva do pacote 1.0.0. Aplicacao exige plano salvo aprovado; workflows da funcao usam publicacao separada e provisionamento/destroy SAM manuais sem aprovacao intermediaria. sam delete remove ZIP atual/templates operacionais e preserva contratos, outras revisoes, bucket e IAM persistente. Consulte [bootstrap](bootstrap/README.md) e [procedimento auth](https://github.com/pknfelps/GerenciamentoMecanicaAutenticacao/blob/develop/docs/DEPLOY.md).
 
-## Collector da API — preparação E5
+## Collector da API e Kubernetes — E5
 
 Collector Kubernetes administrado pela infraestrutura em kubernetes/observability/base, com overlays hom/prd. base-provision sempre aplica o overlay do ambiente, reinicia e aguarda rollout; base-destroy remove o mesmo overlay antes do EKS. O destino de produção é sempre New Relic; credencial no Secrets Manager e bootstrap aplicado são pré-requisitos. A API envia ao endpoint OTLP interno e mantém sua ativação no manifesto (hom habilitado; prd ainda conforme sua configuração versionada). Não há chave New Relic na aplicação.
 
-## X-Ray nativo — preparação E5
+Métricas de nós/pods/containers e disponibilidade, enriquecimento Kubernetes e RBAC somente leitura preparados e validados localmente em 17/10/2026. Implantar pelo base-provision existente; coleta a cada 30 segundos, lista explícita de métricas, TLS kubelet verificado e cobertura de um nó. E5.4/E5.12 ainda dependem de dados reais. [Métricas, permissões, NRQL e conferência](docs/COLLECTOR_API.md).
 
-O [Gateway](docs/GATEWAY.md) mantém `xray_tracing_enabled=false` como padrão Terraform; o tfvars hom define true para a validação AWS e prd continua false; seus logs de acesso incluem somente o identificador técnico adicional xrayTraceId. O [bootstrap](bootstrap/README.md) prepara escrita X-Ray regional para as roles runtime auth e leitura da versão exata da layer Collector pelas pipelines auth. Service-linked role Gateway e permissões CI/Secrets são preservadas. Controles independentes do OpenTelemetry. Permissões do bootstrap já aprovadas/aplicadas; ativação do stage depende de novo plano/aprovação/apply Gateway. Validação real e correlação continuam pendentes.
+## X-Ray nativo — E5
 
-## New Relic US — preparação local
+O [Gateway](docs/GATEWAY.md) mantém `xray_tracing_enabled=false` como padrão Terraform; o tfvars hom define true para a validação AWS e prd continua false; seus logs de acesso incluem somente o identificador técnico adicional xrayTraceId. O [bootstrap](bootstrap/README.md) prepara escrita X-Ray regional para as roles runtime auth e leitura da versão exata da layer Collector pelas pipelines auth. Service-linked role Gateway e permissões CI/Secrets são preservadas. Controles independentes do OpenTelemetry. Permissões aplicadas e ingestão nativa em hom comprovada em 17/10/2026. A correlação W3C/X-Ray continua pendente; segmentos nativos podem conter URL/IP.
 
-Os três sinais são enviados por OTLP com leitura nativa de Secret persistente. Não há toggle de destino nos workflows. Bootstrap/IAM e cadastro manual da chave de cada ambiente são pré-requisitos; a pipeline só inspeciona metadados. [Cadastro, sequência, rotação, testes e limites](docs/NEW_RELIC.md). A ingestão real ainda depende de validação posterior.
+## New Relic US — ingestão hom comprovada
 
-A integração nativa **X-Ray → New Relic** também está preparada no bootstrap: role de leitura persistente, confiança na conta New Relic US com ExternalId obrigatório e restrição regional. Informar o Account ID New Relic antes do próximo plano; conexão manual no console somente após apply aprovado. Não usa License Key/Collectors nem comprova correlação W3C. [Procedimento](docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa).
+Os três sinais são enviados por OTLP com leitura nativa de Secret persistente. Não há toggle de destino nos workflows. Bootstrap/IAM e cadastro manual da chave de cada ambiente são pré-requisitos; a pipeline só inspeciona metadados. [Cadastro, sequência, rotação, testes e limites](docs/NEW_RELIC.md). Ingestão OTLP API/auth, versão da API pelo SHA e indicadores de negócio conferidos em hom; prd permanece pendente.
+
+A integração nativa **X-Ray → New Relic** também está aplicada pelo bootstrap: role de leitura persistente, confiança na conta New Relic US com ExternalId obrigatório e restrição regional. Conexão manual mecanica-xray validada em hom, somente X-Ray/us-east-1. Não usa License Key/Collectors nem comprova correlação W3C. [Procedimento](docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa).
 
 ## Bloqueios de destroy — 17/10/2026
 

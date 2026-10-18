@@ -21,3 +21,7 @@ patches:
                     value: us-east-1
                   - name: NEW_RELIC_LICENSE_KEY_SECRET
                     value: /mecanica/hom/observability/newrelic-license-key
+                  - name: K8S_CLUSTER_NAME
+                    value: mecanica-hom-eks
+                  - name: DEPLOYMENT_ENVIRONMENT
+                    value: hom

@@ -1,90 +1,157 @@
-# Collector da API — preparação local
+# Collector da API e métricas Kubernetes
 
-O Collector pertence à infraestrutura. Os manifestos em [kubernetes/observability](../kubernetes/observability/kustomization.yaml) formam uma Kustomization independente e **não integram a raiz kubernetes**. O base-provision agora aplica essa unidade separadamente após os manifestos da base; base-destroy a remove antes deles e do apply Terraform. Hom/prd usam os mesmos arquivos em clusters separados.
+## Estado e propriedade
 
-Manifestos e integração dos workflows foram preparados e validados localmente. Não houve login, implantação, execução remota de workflows, operação AWS, alteração Terraform/IAM ou ativação da API.
+A infraestrutura administra `kubernetes/observability/base` e seus overlays `hom`/`prd`. A Kustomization é independente da raiz `kubernetes`. `base-provision` já aplica o overlay do ambiente, reinicia e aguarda o Collector; `base-destroy` remove esse mesmo overlay antes do EKS, incluindo ClusterRole/ClusterRoleBinding. Não há workflow novo ou alteração de IAM/Terraform nesta entrega.
 
-## Recursos e configuração
+**Comprovado em hom em 17/10/2026:** os três sinais OTLP da API/Lambda chegaram ao New Relic, incluindo métricas de negócio conferidas por SQL e `service.version` com o SHA da API. A integração nativa X-Ray também recebeu spans. [Evidência consolidada](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_HOM_2026-10-17.md).
 
-| Recurso | Configuração |
+**Preparado localmente nesta entrega:** métricas Kubernetes e enriquecimento dos sinais OTLP. Renderização e validação do YAML não comprovam autorização, TLS, valores ou consumo da nova coleta no EKS. E5.4/E5.12 aguardam implantação e consulta no New Relic. Prd não foi validado.
+
+## Recursos e segurança
+
+| Item | Configuração |
 |---|---|
-| Namespace | `observability`, administrado por esta Kustomization |
-| ServiceAccount | `otel-collector`, sem montagem de token, RBAC ou identidade AWS |
-| ConfigMap | `otel-collector-config`, com `collector.yaml`, nome estável e volume somente leitura |
-| Deployment | `otel-collector`, uma réplica, estratégia Recreate, encerramento de 30 s |
+| Namespace / ServiceAccount | `observability/otel-collector` |
+| Deployment | Uma réplica, `Recreate`, encerramento de até 30 segundos |
 | Imagem | `otel/opentelemetry-collector-contrib:0.161.0` |
-| Service | `otel-collector`, ClusterIP, somente TCP 4318 |
-| Requests / limits | CPU 100m / 500m; memória 128Mi / 256Mi; GOMEMLIMIT 192MiB |
+| Requests / limits | CPU 100m / 500m; memória 128Mi / 256Mi; `GOMEMLIMIT=192MiB` |
+| ConfigMap | `otel-collector-config`, nome estável, volume somente leitura |
+| Service | ClusterIP, somente OTLP HTTP/protobuf TCP 4318 |
+| Probes | `health_check` em 13133, fora do Service; verificam o processo |
+| Processo | UID/GID 10001, sem root/capabilities/escalonamento, filesystem somente leitura e seccomp RuntimeDefault |
 
-O processo usa UID/GID 10001, sem root, capabilities ou escalonamento de privilégios; filesystem somente leitura e seccomp RuntimeDefault. Não há disco persistente, HPA, Operator, Helm ou sidecar. Recreate evita uma segunda réplica durante a substituição e admite interrupção temporária da coleta. A capacidade do nó t3.small não foi comprovada localmente.
+O ServiceAccount mantém `automountServiceAccountToken=false`; **somente o pod do Collector** o substitui por `true`. Token e CA Kubernetes autenticam a coleta/enriquecimento. Pod Identity continua fornecendo a identidade AWS para a leitura da License Key no Secrets Manager; as duas credenciais têm finalidades diferentes. Não há hostNetwork, hostPath, armazenamento persistente, HPA, Operator, Helm ou sidecar.
 
-O receiver OTLP HTTP/protobuf escuta em 0.0.0.0:4318 dentro do pod. Traces, métricas e logs passam por memory_limiter (128 MiB, margem 32 MiB, intervalo 1 s) e batch (1 s, até 512 registros). O exporter debug usa **basic**, emitindo resumos por lote; não é armazenamento nem ingestão New Relic. Não altera serviço, versão ou ambiente recebidos da aplicação.
+`ClusterRole/mecanica-otel-collector` e seu binding autorizam `get/list/watch` de nodes, namespaces, pods, replicationcontrollers, resourcequotas, services, daemonsets, deployments, replicasets, statefulsets, jobs, cronjobs e horizontalpodautoscalers. Essas coleções são observadas pelo `k8s_cluster` 0.161.0, mesmo quando suas métricas não entram na seleção de exportação. Acrescentado somente `get` em `nodes/stats`. Sem wildcard, Secrets, escrita, execução ou `nodes/proxy`.
 
-A extensão health_check escuta em 0.0.0.0:13133 e atende às três probes do Deployment. A porta não integra o Service. Não usar check_collector_pipeline. HTTP 200 demonstra o funcionamento do processo, sem comprovar um destino externo ou entrega dos sinais.
+PV/PVC e EndpointSlices não recebem permissão: na versão fixada, seus informers são condicionais às métricas correspondentes ou a destinos de metadados/eventos, todos desabilitados nesta configuração. Não há coleta de armazenamento, eventos Kubernetes como logs, stdout ou métricas de rede. Não extrair labels/annotations arbitrárias. Service interno não equivale a NetworkPolicy ou autenticação entre pods.
 
-Service ClusterIP significa exposição interna, sem LoadBalancer/Ingress/NodePort. **Não restringe por si só quais pods podem enviar OTLP**; não há NetworkPolicy ou autenticação OTLP nesta etapa. Não há coleta de stdout, Kubernetes, CloudWatch, X-Ray ou segredos.
+## Pipelines e identidade
 
-## Validação local
+- `traces`, `metrics` e `logs`: OTLP → memory_limiter → k8sattributes → resource/cluster → batch → New Relic.
+- `metrics/kubernetes`: kubeletstats + k8s_cluster → memory_limiter → filtro de nomes permitidos → k8sattributes → seleção de atributos de recurso → resource/cluster → batch → o mesmo exporter New Relic.
 
-Docker Desktop com engine Linux deve estar ativo; não é iniciado automaticamente. Na raiz da infraestrutura:
+Os dois receivers coletam a cada **30 segundos**. A lista explícita em `filter/kubernetes` é a autoridade de exportação: métricas padrão fora dela são descartadas, sem afetar métricas técnicas/de negócio recebidas por OTLP. Kubelet não habilita o grupo volume e desabilita suas métricas de rede. O receiver de cluster não está conectado a nenhuma pipeline de logs; `metadata_collection_interval=0s` desabilita a atualização periódica de metadados.
+
+`k8sattributes` associa primeiro por `k8s.pod.uid`, quando presente, e depois pelo IP da conexão OTLP, antes do batch. Extrai somente namespace, nome/UID do pod, nó e Deployment; IP não é exportado como atributo. Não cria spans ou logs. A pipeline Kubernetes conserva somente esses identificadores e `k8s.container.name`, necessário para distinguir containers; remove outros atributos dos receivers, como ID/imagem do container e detalhes de recursos não selecionados.
+
+Os overlays definem `K8S_CLUSTER_NAME=mecanica-<ambiente>-eks` e `DEPLOYMENT_ENVIRONMENT=hom|prd`. `resource/cluster` insere `k8s.cluster.name` e `deployment.environment.name` sem substituir valores já presentes. Não define `service.name` nas métricas Kubernetes e preserva serviço, versão, ambiente e correlação da API.
+
+## Métricas selecionadas e unidades
+
+| Origem | Nomes nativos 0.161.0 | Unidade / interpretação |
+|---|---|---|
+| Kubelet | `k8s.node.cpu.usage`, `k8s.pod.cpu.usage`, `container.cpu.usage` | Cores, não percentual; primeiras amostras podem depender de dois scrapes |
+| Kubelet | `k8s.node.memory.working_set`, `k8s.pod.memory.working_set`, `container.memory.working_set` | Bytes de working set |
+| Kubelet | `k8s.node.memory.available` | Bytes disponíveis |
+| Kubelet | `k8s.node.uptime` | Segundos desde o início do nó |
+| Cluster | `k8s.node.condition_ready`, `k8s.node.condition_memory_pressure`, `k8s.node.condition_disk_pressure`, `k8s.node.condition_pid_pressure` | true=1, false=0, unknown=-1; ausência não equivale a estado saudável |
+| Cluster | `k8s.node.allocatable_cpu`, `k8s.node.allocatable_memory` | Cores e bytes **alocáveis**, não capacidade física |
+| Cluster | `k8s.pod.phase` | Pending=1, Running=2, Succeeded=3, Failed=4, Unknown=5 |
+| Cluster | `k8s.container.ready`, `k8s.container.restarts` | Readiness 0/1 e número atual de reinícios; pode reiniciar com a recriação do container |
+| Workload | `k8s.deployment.desired`, `k8s.deployment.available` | Réplicas desejadas/disponíveis |
+| Workload | `k8s.container.cpu_request`, `k8s.container.cpu_limit` | Cores solicitados/limitados |
+| Workload | `k8s.container.memory_request`, `k8s.container.memory_limit` | Bytes solicitados/limitados |
+
+A ausência de request/limit ou de uma série não deve ser interpretada automaticamente como zero. Kubeletstats consulta o `/stats/summary` do nó; o filtro controla as séries emitidas ao destino, não altera o conteúdo dessa resposta interna.
+
+## Kubelet, TLS e cobertura
+
+`K8S_NODE_NAME` vem de `spec.nodeName` pelo Downward API. O receiver acessa `https://${env:K8S_NODE_NAME}:10250`, com `auth_type=serviceAccount`, CA em `/var/run/secrets/kubernetes.io/serviceaccount/ca.crt` e `insecure_skip_verify=false`. Não há fallback sem TLS verificado.
+
+A conferência anterior de hom validou os SANs DNS/IP do certificado público do kubelet e sua cadeia até a CA EKS. O manifesto usa o nome dinâmico, sem fixar nó ou certificado. Isso não substitui conferir autenticação e coleta após o rollout.
+
+O receiver de cluster observa todos os namespaces, incluindo default, observability, kube-system e database-init quando presentes. Kubeletstats cobre somente o nó onde o Collector está executando. O cluster permanente atual tem um nó; nós transitórios de atualização não têm cobertura completa garantida. Expansão permanente exige revisar a topologia. Uma réplica/Recreate evita dois receivers de cluster simultâneos durante o rollout; não é garantia geral de entrega única.
+
+## Exportação e limites
+
+Preservados memory_limiter 128/32 MiB por segundo, batch 512/1 segundo, exporter OTLP HTTP/protobuf para `https://otlp.nr-data.net`, gzip, timeout de três segundos, fila de 100 lotes por sinal, dois consumidores e retentativas de um a cinco segundos por até 15 segundos. A pipeline Kubernetes também usa essa fila limitada de métricas. Não há fila persistente; saturação, restart ou indisponibilidade podem perder sinais.
+
+A chave continua sendo resolvida pelo provider Secrets Manager nativo na inicialização. Não vai para ConfigMap, token Kubernetes ou variável de ambiente. [Cadastro/rotação](NEW_RELIC.md). O SDK da aplicação continua responsável pela sanitização antes do envio OTLP.
+
+## Validação local desta entrega
+
+Renderizar sem acessar o cluster:
 
 ```powershell
-kubectl kustomize kubernetes/observability
+kubectl kustomize kubernetes/observability/hom
+kubectl kustomize kubernetes/observability/prd
 kubectl kustomize kubernetes
-
-$config = (Resolve-Path kubernetes/observability/collector.yaml).Path
-docker run --rm --read-only --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges --cpus 0.5 --memory 256m --env GOMEMLIMIT=192MiB --mount "type=bind,source=$config,target=/etc/otelcol-contrib/collector.yaml,readonly" otel/opentelemetry-collector-contrib:0.161.0 validate --config=/etc/otelcol-contrib/collector.yaml
 ```
 
-A renderização da raiz deve continuar contendo somente os recursos anteriores; não instalar o Collector por inclusão acidental nessa raiz.
+A raiz continua sem o Collector. Conferir sete recursos por overlay, incluindo RBAC no escopo do cluster, sujeito do binding em observability, identidade hom/prd, pod com token habilitado e ServiceAccount com padrão desabilitado.
 
-A fixture CollectorExportTests do repositório da API aceita o parâmetro NUnit `CollectorConfigPath`. Sem o parâmetro, mantém o YAML local atual do CI e não depende de checkout da infraestrutura. Com o parâmetro, usa o arquivo informado, monta-o somente para leitura, aplica o mesmo usuário/limites/restrições e espera HTTP 200 na porta de health.
+Executado o comando nativo `validate` da imagem 0.161.0 com rede desabilitada, mesmo usuário/limites/restrições, header fictício sobrescrito por `--set` e token fictício somente no container local. A CA foi sobrescrita pelo bundle público da própria imagem, pois a CA de ServiceAccount só existe no pod. Não iniciado nenhum receiver ou exporter, não acessados AWS/New Relic e não alterado o TLS do manifesto. Essa validação confere construção/configuração, não conectividade ou autenticação real. Não foram criados scripts, mocks, suítes de telemetria ou validações em workflows.
 
-Na raiz da API, substitua C:/caminho pelo caminho real:
+## Implantação e conferência posterior
 
-```powershell
-dotnet test ControllerTests/ControllerTests.csproj -c Release --filter FullyQualifiedName~CollectorExportTests -- 'TestRunParameters.Parameter(name="CollectorConfigPath",value="C:/caminho/GerenciamentoMecanicaInfraestrutura/kubernetes/observability/collector.yaml")'
-```
+O mantenedor publica o PR e executa **somente base-provision** com plan → aprovação → apply. O job já aplica `kubernetes/observability/<ambiente>`, executa `rollout restart` e aguarda até 300 segundos, relendo o ConfigMap estável. Recreate admite breve interrupção. Não é necessário deploy de API/Lambda, banco ou Gateway.
 
-Somente nesse teste, o comando nativo do Collector sobrepõe `debug.verbosity=detailed` para conferir conteúdo sanitizado/correlação/métricas. O YAML versionado permanece basic. O teste usa PostgreSQL/Collector reais descartáveis, sem AWS/RDS, e verifica continuidade da API/readiness com o Collector parado. Não habilitar detailed no manifesto de implantação.
-
-O Collector com basic também é exercitado localmente sem override, conferindo health, recebimento de traces/métricas/logs e ausência do conteúdo dos registros nos resumos. Isso não substitui a futura validação Kubernetes.
-
-## Workflows e operação — sem execução AWS nesta entrega
-
-O mantenedor executará base-provision com plan salvo → aprovação → apply. Após o Terraform e os manifestos da base, o job aplica kubernetes/observability, executa rollout restart e aguarda rollout status por até 300 segundos. O restart é intencional em cada execução para reler o ConfigMap estável; Recreate admite breve interrupção. Falha encerra o job, apresenta recursos/eventos/logs limitados e não desfaz recursos já aplicados. O resumo comprova saúde do processo, sem declarar ingestão externa. A role base já tem acesso administrativo ao cluster; a pipeline da API mantém acesso ao namespace default e não administra estes recursos. Para operação manual, selecionar e conferir o contexto correto antes dos comandos abaixo.
+Depois do rollout em hom, com contexto conferido:
 
 ```powershell
 kubectl config current-context
-kubectl apply -k kubernetes/observability
-kubectl rollout status deployment/otel-collector --namespace observability --timeout=120s
-kubectl get service otel-collector --namespace observability
-kubectl logs deployment/otel-collector --namespace observability --tail=40
+kubectl rollout status deployment/otel-collector -n observability --timeout=300s
+kubectl logs deployment/otel-collector -n observability --since=10m --tail=100
+kubectl top nodes
+kubectl top pods -A --containers
+kubectl get nodes
+kubectl get pods -A
+kubectl get deployments -A
+kubectl get clusterrole mecanica-otel-collector
+kubectl get clusterrolebinding mecanica-otel-collector
 ```
 
-A API declara o endpoint `http://otel-collector.observability.svc.cluster.local:4318` nos overlays hom/prd. O overlay hom agora usa **Telemetry__Enabled=true** para a validação AWS; prd continua false. A seleção é versionada no manifesto da API, sem input em api-deploy. Executar base-provision e conferir o Collector antes de api-deploy em hom. Exportação não integra readiness nem transações da aplicação.
+Conferir ausência de erros de RBAC, autenticação, certificados e exportação; comparar séries com estado, reinícios, requests/limits e réplicas. Admitir diferenças de janela e definição de memória em relação a `kubectl top`; CPU em cores, onde 1000m equivale a um core. Verificar novos atributos nos três sinais da API, mantendo serviço/versão/trace.id, e continuidade dos indicadores de negócio. Inspecionar CPU/memória/reinícios do Collector no t3.small antes de propor mudanças de recursos ou permissões.
 
-O ConfigMap não tem hash no nome. O Collector lê a configuração na inicialização; após mudança isolada de YAML, aplicar e reiniciar explicitamente:
+Para alteração isolada posterior, aplicar o overlay correto, reiniciar e aguardar rollout. O descarte já remove o overlay inteiro, incluindo RBAC, depois dos consumidores e banco; ausência tolerada, falhas de exclusão bloqueiam o Terraform. Não remover somente o namespace deixando os recursos de escopo de cluster.
 
-```powershell
-kubectl apply -k kubernetes/observability
-kubectl rollout restart deployment/otel-collector --namespace observability
-kubectl rollout status deployment/otel-collector --namespace observability --timeout=120s
+## Consultas NRQL após implantação
+
+Filtrar sempre o cluster/ambiente. Uptime é uma soma cumulativa monotônica no receiver: consultar seu campo cumulative, preservado pelo New Relic, para obter segundos de vida do nó, sem confundir com o incremento entre amostras. [Tratamento de métricas cumulativas](https://docs.newrelic.com/docs/data-apis/understand-data/metric-data/cumulative-metrics/). Estas consultas ainda não são evidência de ingestão da nova coleta:
+
+```sql
+SELECT latest(`k8s.node.cpu.usage`), latest(`k8s.node.allocatable_cpu`),
+       latest(`k8s.node.memory.working_set`), latest(`k8s.node.allocatable_memory`),
+       latest(`k8s.node.memory.available`), latest(getField(`k8s.node.uptime`, 'cumulative')) AS node_uptime_seconds
+FROM Metric
+WHERE `k8s.cluster.name` = 'mecanica-hom-eks' AND `deployment.environment.name` = 'hom'
+FACET `k8s.node.name` SINCE 15 minutes ago
 ```
 
-Para remover, primeiro desabilitar a exportação da API em seu manifesto e concluir o rollout. Depois de aguardar o escoamento dos lotes, na raiz da infraestrutura:
-
-```powershell
-kubectl delete -k kubernetes/observability --ignore-not-found=true --wait=true --timeout=120s
+```sql
+SELECT latest(`k8s.pod.cpu.usage`), latest(`k8s.pod.memory.working_set`), latest(`k8s.pod.phase`)
+FROM Metric
+WHERE `k8s.cluster.name` = 'mecanica-hom-eks'
+FACET `k8s.namespace.name`, `k8s.pod.name` LIMIT MAX SINCE 15 minutes ago
 ```
 
-O delete inclui o namespace e seus recursos. O namespace pertence a esta unidade; não é compartilhado com recursos de outros donos. api-destroy não remove este Collector. base-destroy, após aprovação do plano salvo, remove a unidade com --ignore-not-found=true --cascade=foreground --wait=true --timeout=300s, antes dos manifestos da base e do apply Terraform. Ausência é tolerada; falhas bloqueiam o descarte, sem forçar finalizadores. A ordem permanece Gateway/consumidores → auth/API → banco → base; o Collector é removido pela base depois de interromper sua exportação.
+```sql
+SELECT latest(`container.cpu.usage`), latest(`container.memory.working_set`),
+       latest(`k8s.container.cpu_request`), latest(`k8s.container.cpu_limit`),
+       latest(`k8s.container.memory_request`), latest(`k8s.container.memory_limit`),
+       latest(`k8s.container.ready`), latest(`k8s.container.restarts`)
+FROM Metric
+WHERE `k8s.cluster.name` = 'mecanica-hom-eks'
+FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name` LIMIT MAX SINCE 15 minutes ago
+```
 
-## Pendências
+```sql
+SELECT latest(`k8s.node.condition_ready`), latest(`k8s.node.condition_memory_pressure`),
+       latest(`k8s.node.condition_disk_pressure`), latest(`k8s.node.condition_pid_pressure`)
+FROM Metric WHERE `k8s.cluster.name` = 'mecanica-hom-eks'
+FACET `k8s.node.name` SINCE 15 minutes ago
+```
 
-Execução dos workflows na AWS, ativação, New Relic/credencial do exporter, enriquecimento/métricas Kubernetes, CloudWatch/X-Ray e avaliação de consumo no EKS continuam pendentes. O CI mantém a renderização das Kustomizations, mas a validação pela imagem Contrib e os testes de conexão dos Collectors foram removidos por decisão do mantenedor. A conferência operacional ocorre após deploy; registros de testes anteriores são históricos. Os manifestos não criam chaves, destinos fictícios ou permissões antecipadas. O SDK permanece responsável pela sanitização antes de exportar. E5.1–E5.3 continuam parciais.
+```sql
+SELECT latest(`k8s.deployment.desired`), latest(`k8s.deployment.available`)
+FROM Metric WHERE `k8s.cluster.name` = 'mecanica-hom-eks'
+FACET `k8s.namespace.name`, `k8s.deployment.name` LIMIT MAX SINCE 15 minutes ago
+```
 
+Para logs/traces de uma chamada nova, verificar `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.node.name` e `k8s.deployment.name`, junto de `service.name`, `service.version` e `trace.id`. Não usar dimensões do cluster para reatribuir as métricas da API.
 
-## Resultado local — 15/10/2026
+CloudWatch, correlação W3C/X-Ray, dashboards, alertas, testes de carga e mudanças da topologia continuam separados. E5.4/E5.12 ficam preparadas localmente até esta conferência posterior.
 
-Configuração validada pelo binário fixado; Collector executado com o usuário, restrições e limites previstos. Health 200 e recebimento dos três sinais confirmados com debug basic sem conteúdo dos registros. Kustomization independente renderizada e raiz da infraestrutura idêntica à anterior. Na API, 90 testes de observabilidade aprovados sem falhas/ignorados; fixture executada também com este YAML e override detailed exclusivo do teste. OpenAPI inalterado. Evidências em artifacts/e5-collector dos dois repositórios. Nenhum recurso AWS foi alterado.
+Referências da versão fixada: [kubeletstats](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.161.0/receiver/kubeletstatsreceiver), [k8s_cluster](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.161.0/receiver/k8sclusterreceiver) e [k8sattributes](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.161.0/processor/k8sattributesprocessor).

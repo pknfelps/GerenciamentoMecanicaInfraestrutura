@@ -4,7 +4,7 @@
 
 **Decisão vigente:** New Relic é permanente nos deploys da base e autenticação. Removidos os toggles de workflow e parâmetros SAM; X-Ray continua independente. A configuração local da API e dos testes não foi alterada.
 
-Integração preparada para envio OTLP HTTP/protobuf de traces, métricas e logs para https://otlp.nr-data.net (HTTPS/443). Implementação e testes são locais; nenhuma aplicação AWS ou ingestão New Relic é comprovada por este documento. API → Collector Kubernetes e Lambda → extensão local continuam independentes.
+Integração preparada para envio OTLP HTTP/protobuf de traces, métricas e logs para https://otlp.nr-data.net (HTTPS/443). Ingestão OTLP e X-Ray comprovadas em hom em 17/10/2026; [evidência e limites](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_HOM_2026-10-17.md). Prd e a nova coleta Kubernetes não foram comprovados. API → Collector Kubernetes e Lambda → extensão local continuam independentes.
 
 A chave é Ingest - License da conta US. Account ID não autentica o exporter e não precisa ser publicado em SSM. Os 100 GB informados pelo mantenedor são a franquia da conta, compartilhada pelo que ela recebe; não existe bloqueio automático por essa configuração. Acompanhar Data Management/consumo no New Relic antes e durante as janelas de validação. Dashboards, alertas de consumo e limites contratados devem ser conferidos na própria conta; não há garantia de custo zero na AWS.
 
@@ -23,7 +23,7 @@ Workflows inspecionam metadados e presença de exatamente uma versão AWSCURRENT
 
 Os dois binários fixados incluem o provider nativo secretsmanager, classificado alpha. O header api-key usa `${secretsmanager:${env:NEW_RELIC_LICENSE_KEY_SECRET}}`; a variável contém somente o NOME do Secret. O provider resolve a referência no início com credenciais temporárias e a versão atual padrão do serviço. Não acrescentar condição IAM exigindo VersionStage explícito: esse provider omite o campo na chamada.
 
-A base cria mecanica-<ambiente>-collector-runtime, com Pod Identity do cluster do ambiente para observability/otel-collector. O ServiceAccount continua sem RBAC e automountServiceAccountToken=false; o token específico Pod Identity é entregue pelo EKS, independentemente da montagem automática de credenciais Kubernetes. Role permite somente GetSecretValue no ARN exato do Secret do ambiente. Não concede leitura JWT/banco nem escrita de Secrets.
+A base cria mecanica-<ambiente>-collector-runtime, com Pod Identity do cluster do ambiente para observability/otel-collector. O ServiceAccount mantém automountServiceAccountToken=false; o pod do Collector habilita sua montagem para os receivers Kubernetes e k8sattributes, com RBAC somente leitura. O token específico Pod Identity é entregue pelo EKS e tem finalidade distinta. [Permissões e métricas](COLLECTOR_API.md). Role permite somente GetSecretValue no ARN exato do Secret do ambiente. Não concede leitura JWT/banco nem escrita de Secrets.
 
 A role persistente auth-runtime recebe GetSecretValue somente no Secret do ambiente. Extensão e código da Lambda compartilham a role e o processo da função pode acessar esse recurso: não existe isolamento IAM entre eles. As permissões já existentes de JWT/banco não são modificadas.
 
@@ -34,13 +34,13 @@ ConfigMaps, ZIPs, templates, ambientes Lambda e estado/planos Terraform contêm 
 1. Bootstrap aplicado e chave hom cadastrada.
 2. Executar base-provision (develop/hom). O Collector sempre utiliza New Relic. Preserva plan → aprovação → apply do mesmo plano; o preflight ocorre antes do plan e novamente antes do apply. O Secret e sua versão atual são pré-requisitos de toda execução de provisionamento.
 3. Executar auth-publish de uma revisão nova, com layer/OpenTelemetry permanentes e o único Function/Observability/collector.yaml de produção.
-4. Executar auth-provision com environment=hom, artifact_commit do summary publicado e xray_enabled conforme desejado. OpenTelemetry, layer e New Relic são fixos no SAM; não há inputs ou parâmetros para desligá-los. A pipeline rejeita templates antigos com telemetria condicional; publicar revisão nova.
+4. Executar auth-provision com environment=hom, artifact_commit do summary publicado; X-Ray é permanente na Lambda. OpenTelemetry, layer e New Relic são fixos no SAM; não há inputs ou parâmetros para desligá-los. A pipeline rejeita templates antigos com telemetria condicional; publicar revisão nova.
 5. Atualizar o Gateway para consumir a nova revisão/versão numérica auth. Não é necessário novo deploy da API nem reaplicar o banco apenas por essa integração.
 6. Com chamadas fictícias controladas, conferir no New Relic mecanica-api/mecanica-auth, versões/ambiente hom, traces/logs correlacionados, métricas técnicas/negócio, sanitização e possíveis NrIntegrationError. Validar também chamadas isoladas e memória/tempo reais da extensão.
 
 New Relic é o destino permanente nos dois ambientes. Não há opção de deploy diagnóstico ou desativação de telemetria na Lambda; os Collectors locais de teste continuam independentes da AWS. Não há fallback para debug quando a chave não puder ser lida. Falha de resolução impede iniciar o Collector; destino indisponível depois de iniciado tem tentativas limitadas e pode perder sinais.
 
-O Collector da API possui somente kubernetes/observability/base e os overlays hom/prd. Um único YAML de produção na base aponta para New Relic; os overlays definem o nome público do Secret do ambiente. Os nomes dos recursos existentes são preservados, sem recriar namespace/Service/Deployment. O restart existente continua necessário para reler o ConfigMap e a chave; pode interromper brevemente a coleta.
+O Collector da API possui somente kubernetes/observability/base e os overlays hom/prd. Um único YAML de produção na base aponta para New Relic; os overlays definem o nome público do Secret, cluster e ambiente. A pipeline exclusiva metrics/kubernetes coleta a cada 30 segundos e filtra nomes permitidos; k8sattributes enriquece os três sinais OTLP antes do batch, preservando a identidade da API. Os nomes dos recursos existentes são preservados, sem recriar namespace/Service/Deployment. O restart existente continua necessário para reler o ConfigMap e a chave; pode interromper brevemente a coleta.
 
 Descarte continua Gateway/consumidores → auth/API → banco → base; base-destroy remove kubernetes/observability/<ambiente> pelos mesmos nomes estáveis. Os Secrets e suas versões permanecem no bootstrap. Não limpar versões ou remover a chave no New Relic como parte do destroy dos ambientes.
 
@@ -58,29 +58,29 @@ Para trocar a chave: cadastrar a nova versão no console, manter AWSCURRENT e re
 
 Terraform fmt/init sem backend/validate, renderização Kustomize e validação SAM/workflows continuam conferindo a estrutura dos arquivos. Por decisão do mantenedor, foram removidos os testes .NET de conexão com New Relic e Collectors locais, os receptores HTTP fictícios e os steps CI que executavam as imagens para validar o exporter/YAML. Não substituir os cenários por testes ignorados ou mocks novos.
 
-A imagem Contrib 0.151.0 não contém decouple; a layer oficial continua usando esse processor no YAML de produção. Não há overrides de teste ou prova automatizada de transporte. Ingestão, falhas de exportação, ciclo/fila/congelamento e comportamento dos Collectors serão conferidos operacionalmente na AWS. Testes funcionais e de instrumentação/sanitização InMemory permanecem.
+A imagem Contrib 0.151.0 não contém decouple; a layer oficial continua usando esse processor no YAML de produção. Não há overrides de teste ou prova automatizada de transporte. Ingestão, falhas de exportação, ciclo/fila/congelamento e comportamento dos Collectors serão conferidos operacionalmente na AWS. Testes funcionais HTTP/JWT/PostgreSQL e sanitização do console permanecem; todos os testes automatizados de telemetria, incluindo InMemory, foram removidos por decisão do mantenedor.
 
-Não acrescentados scripts, Operators, agentes, coleta stdout ou duplicação dos exporters. Somente o Compose/local de teste mantém debug, sem AWS/New Relic. Os deploys usam exclusivamente New Relic. Próximas entregas: ingestão comprovada, dashboards/alertas, coleta Kubernetes/CloudWatch e integração X-Ray/New Relic/correlação W3C.
+Não acrescentados scripts, Operators, agentes, coleta stdout ou duplicação dos exporters. Somente o Compose/local de teste mantém debug, sem AWS/New Relic. Os deploys usam exclusivamente New Relic. Ingestão OTLP e X-Ray hom já comprovadas; coleta Kubernetes preparada localmente. Próximas conferências: implantação Kubernetes, dashboards/alertas, CloudWatch e correlação W3C/X-Ray.
 
 ## X-Ray nativo → New Relic — preparação declarativa
 
-Implementação local de 15/10/2026; plano AWS, apply, conexão e ingestão desta integração ainda pendentes. Este caminho é independente do OTLP: o New Relic assume uma role AWS e consulta o X-Ray diretamente. Não passa pelos Collectors, não usa a License Key e não exige User API Key ou provider New Relic.
+Implementação de 15/10/2026; bootstrap aplicado, conexão mecanica-xray configurada e ingestão de 786 spans xray.polling observada na janela de validação de hom em 17/10/2026. A união dos contextos nativo/W3C continua pendente. Este caminho é independente do OTLP: o New Relic assume uma role AWS e consulta o X-Ray diretamente. Não passa pelos Collectors, não usa a License Key e não exige User API Key ou provider New Relic.
 
 ### Bootstrap e alcance do acesso
 
 `bootstrap/newrelic-xray.tf` declara a role persistente `mecanica-newrelic-xray`, no path `/mecanica/observability/`, e a policy inline `read-regional-xray`. A confiança permite apenas `sts:AssumeRole` pela conta New Relic US `754728514883`, com `sts:ExternalId` exatamente igual a `new_relic_account_id`.
 
-Antes do próximo plano administrativo, informar em `bootstrap.tfvars` o **Account ID do New Relic**, como string numérica positiva. A variável é obrigatória, sem default; o exemplo contém somente um formato fictício comentado. Esse identificador não é secreto. Não alterar o backend nem reutilizar planos anteriores à nova role.
+Em planos administrativos, informar manualmente `new_relic_account_id` com o **Account ID do New Relic**, como string numérica positiva, por argumento/variável Terraform local; por decisão do mantenedor, não é necessário versioná-lo. A variável é obrigatória, sem default; o exemplo contém somente um formato fictício comentado. Esse identificador não é secreto. Não alterar o backend nem reutilizar planos anteriores à nova role.
 
 A policy concede somente `xray:Get*` e `xray:BatchGet*`, com `Resource="*"` e `aws:RequestedRegion=us-east-1`. As consultas de traces não aceitam ARN por função/Gateway nem isolamento por ambiente. A role pode ler os traces disponíveis da conta AWS 121754142617 nessa região, inclusive hom/prd quando existirem; filtros do console não são controle de acesso IAM. Não anexar ReadOnlyAccess, Budgets, permissões CloudWatch, Secrets, escrita X-Ray ou administração de outros recursos. A role pertence ao bootstrap compartilhado e permanece após destroy de Gateway, auth, banco ou base.
 
-### Sequência após autorização
+### Procedimento de configuração e recriação
 
-1. Preencher `new_relic_account_id`; gerar o plano salvo do bootstrap e revisar. O esperado para esta entrega isolada é somente duas criações (role e policy inline), nenhuma alteração/exclusão de recursos existentes e o novo output `newrelic_xray_role_arn`. Se houver outras mudanças, revisá-las antes de aprovar.
+1. Informar `new_relic_account_id`; gerar o plano salvo do bootstrap e revisar (adoção inicial já concluída). O esperado para esta entrega isolada é somente duas criações (role e policy inline), nenhuma alteração/exclusão de recursos existentes e o novo output `newrelic_xray_role_arn`. Se houver outras mudanças, revisá-las antes de aprovar.
 2. Aplicar somente o binário aprovado, conferir trust/policy implantadas e obter o ARN com `terraform output -raw newrelic_xray_role_arn`. Não criar outra role manualmente.
 3. No New Relic US, acessar **All capabilities → Infrastructure → AWS**, iniciar a conexão de API polling e usar o nome `mecanica-xray` e o ARN do output. O External ID será o Account ID dessa mesma conta New Relic. Usar a role personalizada existente; não seguir as opções de anexar ReadOnlyAccess ou Budgets do tutorial genérico.
 4. Em **Manage services**, habilitar somente **AWS X-Ray**, limitar a `us-east-1` e manter polling em cinco minutos. Não habilitar EC2/EBS, outros serviços ou coleta adicional de tags/IPs. Não fornecer a License Key ou credenciais AWS permanentes. Se a interface ou a verificação exigir permissão além da policy aprovada, registrar o requisito e revisar antes de ampliar o acesso.
-5. Para a comprovação em hom, executar `auth-provision` com `xray_enabled=true` e atualizar o Gateway para a nova versão numérica da função. Se for necessária publicação nova, usar `auth-publish` antes. O tfvars hom do Gateway já solicita X-Ray habilitado; mudanças de stage seguem seu plano/aprovação/apply. Prd permanece desabilitado. API e Collectors não exigem alteração por causa dessa integração.
+5. Para a comprovação em hom, executar `auth-provision` com tracing Active fixado no template, sem toggle e atualizar o Gateway para a nova versão numérica da função. Se for necessária publicação nova, usar `auth-publish` antes. O tfvars hom do Gateway já solicita X-Ray habilitado; mudanças de stage seguem seu plano/aprovação/apply. Prd permanece desabilitado. API e Collectors não exigem alteração por causa dessa integração.
 6. Gerar chamadas controladas, com dados fictícios, incluindo sucesso e erros esperados. Conferir segmentos Gateway/Lambda, vínculos nativos e `xrayTraceId` dos access logs, além da amostragem efetiva. Não presumir que toda chamada foi amostrada e não adicionar regras próprias nesta entrega.
 7. Aguardar a consulta da integração e executar no New Relic:
 
@@ -101,7 +101,7 @@ Conferir serviço/região, IDs dos traces, horários e atraso observado com os s
 - O marcador `newRelic.ingestPoint='xray.polling'` distingue este caminho do OTLP. A habilitação não adiciona exporter X-Ray aos Collectors nem duplica o envio OTLP existente. A união dos dois contextos e a análise de possíveis sobreposições permanecem pendentes.
 - Falha na integração não altera o fluxo de negócio nem o envio OTLP. Em ausência de spans, conferir conexão, região, permissão, tracing/amostragem nativa e janela de polling; não habilitar outros serviços nem imprimir credenciais como diagnóstico.
 
-**Limite desta entrega:** configuração e procedimento preparados localmente. E5.3/E5.14 continuam parciais: aplicação, ingestão real, conteúdo dos segmentos e correlação W3C/X-Ray precisam ser comprovados; receiver CloudWatch, dashboards e alertas ficam separados. A instrumentação atual continua W3C e mantém extração X-Ray desabilitada. Não executar destroy como teste.
+**Estado atual:** ingestão e amostra de segmentos nativos comprovadas em hom; conteúdo inclui URL/IP e não recebe a sanitização OTLP. E5.3/E5.14 continuam parciais nos escopos restantes, incluindo correlação W3C/X-Ray e prd; receiver CloudWatch, dashboards e alertas ficam separados. A nova coleta Kubernetes está preparada localmente e aguarda base-provision/conferência. A instrumentação atual continua W3C e mantém extração X-Ray desabilitada. Não executar destroy como teste.
 
 Referências oficiais: [conexão AWS por polling](https://docs.newrelic.com/docs/infrastructure/amazon-integrations/connect/set-up-aws-api-polling/), [integração X-Ray](https://docs.newrelic.com/docs/infrastructure/amazon-integrations/aws-integrations-list/aws-x-ray-monitoring-integration/) e [ações/recursos IAM X-Ray](https://docs.aws.amazon.com/service-authorization/latest/reference/list_xray.html).
 
