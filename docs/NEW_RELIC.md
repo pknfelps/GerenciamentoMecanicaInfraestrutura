@@ -112,3 +112,11 @@ Validação local concluída: Terraform 1.15.9/AWS 6.58.0, fmt -check, init -bac
 O Collector EKS envia logs de acesso do Gateway (mensagem fixa e campos técnicos) e 13 gauges de Gateway/Lambda/RDS ao mesmo exporter New Relic. Não há integração AWS adicional por polling no console, nova chave, alteração da Lambda ou recoleta de logs de aplicação. X-Ray continua independente.
 
 A role do Collector recebe somente FilterLogEvents no grupo do ambiente e GetMetricData regional; o bootstrap permanece igual. Após PRs, executar somente base-provision e seguir as [consultas NRQL e critérios de validação CloudWatch](CLOUDWATCH.md). Coleta e ingestão reais ainda pendentes. Cada restart relê cinco minutos de logs; métricas têm atraso de dez minutos, sem backfill. Confirmar última coleta antes do destroy do Gateway, que remove o grupo de logs.
+
+## Dashboard de operação persistente — 18/10/2026
+
+Definição JSON versionada e unidade Terraform local em [observability/newrelic](../observability/newrelic/README.md), fora dos workflows/destroys AWS. Vinte painéis de consulta e dois textos, ambiente hom/prd de seleção única e padrão hom; consultas HTTP e 23 métricas Kubernetes existentes. Sem dashboards de OS/integrações, alertas ou alterações de instrumentação nesta entrega.
+
+Usa uma User API Key autorizada a administrar dashboards, fornecida por NEW_RELIC_API_KEY no processo local; não reutilizar a Ingest - License dos Collectors. Account ID não é secreto. Estado remoto compartilhado e persistente, outputs somente GUID/permalink e prevent_destroy; mudanças por PR/plano salvo. Documentados os comandos de init, plan, apply posterior e verificação de ausência de drift.
+
+Preparação e consultas históricas hom/prd validadas; prd sem dados não é validação operacional. O dashboard ainda não foi criado: backend autenticado, plano remoto/aprovação, apply e layout visual permanecem pendentes. Não é necessário novo deploy da API ou infraestrutura para publicar o dashboard. A leitura histórica não elimina as ressalvas de cobertura dos access logs ou de representação diferente dos IDs xray.polling/OTLP.

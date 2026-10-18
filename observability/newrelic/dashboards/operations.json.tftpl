@@ -1,0 +1,469 @@
+{
+  "name": "Mecânica — Operação da API e Kubernetes",
+  "description": "Operação HTTP e Kubernetes por ambiente. Fonte versionada em GerenciamentoMecanicaInfraestrutura/observability/newrelic. Recursos persistentes, independentes do destroy AWS.",
+  "permissions": "PUBLIC_READ_ONLY",
+  "pages": [
+    {
+      "name": "Operação",
+      "description": "Métricas técnicas da API e Kubernetes no período selecionado.",
+      "widgets": [
+        {
+          "title": "Como interpretar este dashboard",
+          "layout": {
+            "row": 1,
+            "column": 1,
+            "width": 12,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "## Operação da API e Kubernetes\nSelecione **hom** ou **prd** e o período no seletor global; sugestão operacional: **30 minutos**. O filtro é de visualização, não de autorização.\n**Sem dados não significa zero ou ambiente saudável.** Os valores representam o intervalo escolhido, inclusive pods já removidos. Consulte a última amostra; um valor histórico não comprova disponibilidade agora.\nVolume, códigos e latência HTTP excluem live/ready/startup; requisições ativas podem incluir probes. 4xx são respostas distintas de falhas técnicas 5xx. Latência em **ms**, CPU em **cores**, memória em **MiB**; recursos alocáveis não são capacidade física."
+          }
+        },
+        {
+          "title": "Última amostra da API no período (UTC)",
+          "layout": {
+            "row": 4,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(latest(timestamp), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Última amostra UTC' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND metricName = 'dotnet.process.memory.working_set' FACET `k8s.pod.name`, `k8s.pod.uid` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Última amostra Kubernetes no período (UTC)",
+          "layout": {
+            "row": 4,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(latest(timestamp), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Última amostra UTC' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName = 'k8s.node.cpu.usage' FACET `k8s.node.name` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Requisições concluídas (sem probes)",
+          "layout": {
+            "row": 7,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT count(`http.server.request.duration`) AS 'Requisições' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND (`http.route` IS NULL OR `http.route` NOT IN ('health/live', 'health/ready', 'health/startup', '/health/live', '/health/ready', '/health/startup'))"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Requisições por minuto (sem probes)",
+          "layout": {
+            "row": 7,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT rate(count(`http.server.request.duration`), 1 minute) AS 'req/min' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND (`http.route` IS NULL OR `http.route` NOT IN ('health/live', 'health/ready', 'health/startup', '/health/live', '/health/ready', '/health/startup')) TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Respostas 5xx (sem probes)",
+          "layout": {
+            "row": 7,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT 100 * filter(count(`http.server.request.duration`), WHERE `http.response.status_code` >= 500 AND `http.response.status_code` < 600) / count(`http.server.request.duration`) AS '5xx (%)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND (`http.route` IS NULL OR `http.route` NOT IN ('health/live', 'health/ready', 'health/startup', '/health/live', '/health/ready', '/health/startup'))"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Códigos HTTP (sem probes)",
+          "layout": {
+            "row": 10,
+            "column": 1,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT count(`http.server.request.duration`) AS 'Requisições' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND (`http.route` IS NULL OR `http.route` NOT IN ('health/live', 'health/ready', 'health/startup', '/health/live', '/health/ready', '/health/startup')) FACET `http.response.status_code` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Latência HTTP (sem probes, ms)",
+          "layout": {
+            "row": 10,
+            "column": 7,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`http.server.request.duration`) * 1000 AS 'Média (ms)', getField(percentile(`http.server.request.duration`, 50), '50.0') * 1000 AS 'p50 (ms)', getField(percentile(`http.server.request.duration`, 95), '95.0') * 1000 AS 'p95 (ms)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND (`http.route` IS NULL OR `http.route` NOT IN ('health/live', 'health/ready', 'health/startup', '/health/live', '/health/ready', '/health/startup')) TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Operações HTTP por método e modelo da rota",
+          "layout": {
+            "row": 14,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT count(`http.server.request.duration`) AS 'Requisições', 100 * filter(count(`http.server.request.duration`), WHERE `http.response.status_code` >= 500 AND `http.response.status_code` < 600) / count(`http.server.request.duration`) AS '5xx (%)', average(`http.server.request.duration`) * 1000 AS 'Média (ms)', getField(percentile(`http.server.request.duration`, 95), '95.0') * 1000 AS 'p95 (ms)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND (`http.route` IS NULL OR `http.route` NOT IN ('health/live', 'health/ready', 'health/startup', '/health/live', '/health/ready', '/health/startup')) FACET `http.request.method`, `http.route` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Requisições ativas por pod (inclui probes)",
+          "layout": {
+            "row": 18,
+            "column": 1,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`http.server.active_requests`) AS 'Requisições ativas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} FACET `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Working set do processo .NET por pod (MiB)",
+          "layout": {
+            "row": 18,
+            "column": 7,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`dotnet.process.memory.working_set`) / 1048576 AS 'Processo (MiB)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} FACET `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Réplicas dos Deployments no período",
+          "layout": {
+            "row": 22,
+            "column": 1,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.deployment.desired`) AS 'Desejadas', latest(`k8s.deployment.available`) AS 'Disponíveis' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.deployment.name` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Fases dos pods no período",
+          "layout": {
+            "row": 22,
+            "column": 7,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.pod.phase`) AS 'Fase: Pending=1 Running=2 Succeeded=3 Failed=4 Unknown=5' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Readiness e reinícios acumulados do container",
+          "layout": {
+            "row": 26,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.container.ready`) AS 'Ready (1/0)', latest(`k8s.container.restarts`) AS 'Reinícios no container atual' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "CPU dos pods (cores)",
+          "layout": {
+            "row": 30,
+            "column": 1,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.pod.cpu.usage`) AS 'CPU (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Working set dos pods (MiB)",
+          "layout": {
+            "row": 30,
+            "column": 7,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.pod.memory.working_set`) / 1048576 AS 'Working set (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "CPU dos containers: utilização, request e limit (cores)",
+          "layout": {
+            "row": 34,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`container.cpu.usage`) AS 'Utilizada (cores)', latest(`k8s.container.cpu_request`) AS 'Request (cores)', latest(`k8s.container.cpu_limit`) AS 'Limit (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Memória dos containers: working set, request e limit (MiB)",
+          "layout": {
+            "row": 38,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`container.memory.working_set`) / 1048576 AS 'Working set (MiB)', latest(`k8s.container.memory_request`) / 1048576 AS 'Request (MiB)', latest(`k8s.container.memory_limit`) / 1048576 AS 'Limit (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "CPU dos nós: utilização e alocável (cores)",
+          "layout": {
+            "row": 42,
+            "column": 1,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.node.cpu.usage`) AS 'Utilizada (cores)', latest(`k8s.node.allocatable_cpu`) AS 'Alocável (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.node.name` LIMIT 100 TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Memória dos nós (MiB)",
+          "layout": {
+            "row": 42,
+            "column": 7,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.node.memory.working_set`) / 1048576 AS 'Working set (MiB)', latest(`k8s.node.allocatable_memory`) / 1048576 AS 'Alocável (MiB)', latest(`k8s.node.memory.available`) / 1048576 AS 'Disponível (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.node.name` LIMIT 100 TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Condições e uptime dos nós no período",
+          "layout": {
+            "row": 46,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`k8s.node.condition_ready`) AS 'Ready', latest(`k8s.node.condition_memory_pressure`) AS 'MemoryPressure', latest(`k8s.node.condition_disk_pressure`) AS 'DiskPressure', latest(`k8s.node.condition_pid_pressure`) AS 'PIDPressure', latest(getField(`k8s.node.uptime`, 'cumulative')) AS 'Uptime (s)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.node.name` LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Limites da leitura",
+          "layout": {
+            "row": 50,
+            "column": 1,
+            "width": 12,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "Condições do nó: **true=1, false=0, unknown=-1**; ausência é ausência. Readiness usa 1/0. Reinícios são o valor acumulado do container atual, não o total ocorrido no período.\nMétricas Kubernetes são coletadas a cada 30 segundos. O kubelet cobre o nó onde o Collector executa; o cluster atual tem um nó. Requests/limits ausentes não são zero. Não somar amostras ao longo do tempo para obter consumo simultâneo.\nPercentis são estimativas da distribuição HTTP recebida. O painel usa métricas, não amostragem de spans ou contagem de access logs. Não comprova saúde atual, disponibilidade ponta a ponta, capacidade sob carga ou união automática X-Ray/OTLP."
+          }
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "environment",
+      "title": "Ambiente",
+      "type": "ENUM",
+      "isMultiSelection": false,
+      "replacementStrategy": "STRING",
+      "defaultValues": [
+        {
+          "value": {
+            "string": "hom"
+          }
+        }
+      ],
+      "items": [
+        {
+          "title": "hom",
+          "value": "hom"
+        },
+        {
+          "title": "prd",
+          "value": "prd"
+        }
+      ]
+    }
+  ]
+}
