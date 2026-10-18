@@ -1,5 +1,17 @@
 # Bootstrap administrativo persistente
 
+## Pipeline dos dashboards New Relic — 18/10/2026
+
+`newrelic-pipeline.tf` declara a role persistente `mecanica-newrelic-github`, caminho `/mecanica/pipelines/`, com prevent_destroy, trust no provider OIDC existente (aud sts.amazonaws.com; subject exato infra:environment:newrelic) e uma policy inline exclusiva do backend dos dashboards. Não altera/amplia as roles base/Gateway; não administra recursos New Relic ou versões de Secrets. A restrição main é configurada no Environment GitHub e conferida no workflow; não se depende de claim ref personalizada.
+
+Permissões: GetBucketLocation no bucket de estado; ListBucket restrito ao estado/lock e ao prefixo de enumeração shared/newrelic/workspaces/; Get/Put em shared/newrelic/terraform.tfstate; Get/Put/Delete em shared/newrelic/terraform.tfstate.tflock. Sem DeleteObject no estado, GetObject em outros estados, IAM, Secrets, artefatos ou provisionamento AWS. Criptografia AES256/lockfile/backend preservados. Role e estado não pertencem ao destroy de hom/prd.
+
+Output `newrelic_pipeline_role_arn` preenche a variável `AWS_NEW_RELIC_ROLE_ARN` do Environment newrelic. O Account ID New Relic 8626152 será variável desse Environment, e a User API Key será Secret cadastrado manualmente pelo mantenedor no GitHub, nunca no bootstrap/estado. A variável new_relic_account_id do bootstrap continua sendo a configuração da confiança X-Ray, independente da credencial de publicação.
+
+Aplicação posterior: gerar plano salvo com os tfvars locais existentes, revisar nova role/policy/output e qualquer outro diff, obter aprovação e aplicar somente o plano aprovado. Depois criar/proteger os Environments antes de disparar o workflow; reviewer pknfelps/autorrevisão permitida em newrelic-approval, nenhuma credencial nesse Environment. [Procedimento completo](../observability/newrelic/README.md#publicação-padrão-pelo-github-actions).
+
+fmt/init sem backend/validate e JSON das policies conferidos localmente, inline com quatro statements/886 caracteres nos valores deste projeto. Nenhum login, plano AWS, apply ou configuração remota nesta entrega. As permissões reais/OIDC e o primeiro plan da pipeline ainda exigem validação após aplicação.
+
 ## Decisão SAM da autenticação — 2026-10-11
 
 [ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md) define SAM/CloudFormation para os recursos auth, sem migrar este bootstrap. Role/policies auth-runtime continuam persistentes e serão reutilizadas pela stack; sua exclusão não fará parte do destroy auth, preservando a limpeza posterior de ENIs. Buckets/OIDC/role CI e IAM das pipelines continuam Terraform.

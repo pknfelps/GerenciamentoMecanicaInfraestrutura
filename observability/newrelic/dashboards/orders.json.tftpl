@@ -1,0 +1,369 @@
+{
+  "name": "Mecânica — Ordens de serviço",
+  "description": "Volume, durações concluídas e falhas de OS por ambiente. Definição persistente em GerenciamentoMecanicaInfraestrutura/observability/newrelic.",
+  "permissions": "PUBLIC_READ_ONLY",
+  "pages": [
+    {
+      "name": "Ordens de serviço",
+      "description": "Indicadores históricos de negócio no período selecionado.",
+      "widgets": [
+        {
+          "title": "Como interpretar as ordens de serviço",
+          "layout": {
+            "row": 1,
+            "column": 1,
+            "width": 12,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "## Ordens de serviço\nSelecione **hom** ou **prd** e o período global; sugestão: **sete dias**. Os dias usam **America/Sao_Paulo**; início e fim podem conter dias parciais. O filtro é de visualização, não de autorização.\nDurações em **minutos**, calculadas pelas amostras concluídas de todas as réplicas. Ausência de amostra não vira duração zero; uma duração realmente zero é válida. Contadores podem retornar zero mesmo sem coleta: confira a última amostra.\nEstes indicadores não mostram OSs abertas ou o estado atual dos cadastros. Última amostra antiga não comprova coleta ou disponibilidade atuais."
+          }
+        },
+        {
+          "title": "Última amostra de negócio no período (UTC)",
+          "layout": {
+            "row": 4,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(latest(timestamp), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Última amostra UTC' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND metricName IN ('mecanica.orders.created', 'mecanica.orders.stage.duration', 'mecanica.orders.service.duration', 'mecanica.orders.processing.failures', 'mecanica.orders.telemetry.failures') FACET metricName LIMIT 5"
+              }
+            ]
+          }
+        },
+        {
+          "title": "OSs criadas no período",
+          "layout": {
+            "row": 4,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.orders.created`) AS 'Criações' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "OSs criadas por dia — São Paulo",
+          "layout": {
+            "row": 7,
+            "column": 1,
+            "width": 12,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.orders.created`) AS 'Criações' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} FACET dateOf(timestamp) LIMIT MAX WITH TIMEZONE 'America/Sao_Paulo'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Diagnóstico concluído — média e amostras",
+          "layout": {
+            "row": 10,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)', count(`mecanica.orders.stage.duration`) AS 'Amostras concluídas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'diagnosis'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Diagnóstico concluído — evolução da média (min)",
+          "layout": {
+            "row": 10,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'diagnosis' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Execução concluído — média e amostras",
+          "layout": {
+            "row": 13,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)', count(`mecanica.orders.stage.duration`) AS 'Amostras concluídas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'execution'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Execução concluído — evolução da média (min)",
+          "layout": {
+            "row": 13,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'execution' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Espera pela entrega — serviço concluído",
+          "layout": {
+            "row": 16,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)', count(`mecanica.orders.stage.duration`) AS 'Amostras concluídas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'delivery_wait' AND `completion.reason` = 'service_completed'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Espera pela entrega — serviço concluído (min)",
+          "layout": {
+            "row": 16,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'delivery_wait' AND `completion.reason` = 'service_completed' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Espera pela entrega — orçamento recusado",
+          "layout": {
+            "row": 19,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)', count(`mecanica.orders.stage.duration`) AS 'Amostras concluídas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'delivery_wait' AND `completion.reason` = 'budget_rejected'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Espera pela entrega — orçamento recusado (min)",
+          "layout": {
+            "row": 19,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.stage.duration`) / 60 AS 'Média (min)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND stage = 'delivery_wait' AND `completion.reason` = 'budget_rejected' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Serviço completo — média e serviços medidos",
+          "layout": {
+            "row": 22,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.service.duration`) / 60 AS 'Média (min)', count(`mecanica.orders.service.duration`) AS 'Serviços medidos' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Serviço completo — evolução da média (min)",
+          "layout": {
+            "row": 22,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.orders.service.duration`) / 60 AS 'Média (min)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Falhas técnicas de processamento por operação",
+          "layout": {
+            "row": 25,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.orders.processing.failures`) AS 'Falhas HTTP 500' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} FACET operation LIMIT MAX"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Falhas de medição após o commit",
+          "layout": {
+            "row": 25,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.orders.telemetry.failures`) AS 'Falhas de medição' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Definições e limites das medições",
+          "layout": {
+            "row": 28,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "**Diagnóstico:** InDiagnosis → WaitingForApproval. **Execução:** InExecution → Finished/ServiceCompleted. **Espera pela entrega:** Finished → Delivered, separando serviço concluído de orçamento recusado. **Serviço completo:** abertura (Received) → Finished/ServiceCompleted, sem aguardar entrega ou incluir recusa. Não somar médias de etapas para obter o total.\nCriações confirmadas não são descontadas por recusa ou exclusão posterior. Amostras são intervalos concluídos, não o número atual de OSs em um estado. Falhas de processamento contam respostas HTTP 500; falhas de medição ocorrem após o commit e não significam falha da operação persistida.\nA data corresponde à janela agregada da métrica; janelas OTLP podem atravessar meia-noite. **O histórico SQL é a referência exata pela data do acontecimento**, com início inclusivo e fim exclusivo. Há possíveis perdas, lacunas e duplicações, sem backfill, reconciliação automática ou garantia de entrega única. Notificações e integrações pertencem a outro dashboard."
+          }
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "environment",
+      "title": "Ambiente",
+      "type": "ENUM",
+      "isMultiSelection": false,
+      "replacementStrategy": "STRING",
+      "defaultValues": [
+        {
+          "value": {
+            "string": "hom"
+          }
+        }
+      ],
+      "items": [
+        {
+          "title": "hom",
+          "value": "hom"
+        },
+        {
+          "title": "prd",
+          "value": "prd"
+        }
+      ]
+    }
+  ]
+}

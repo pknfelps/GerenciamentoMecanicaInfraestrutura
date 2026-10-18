@@ -112,3 +112,43 @@ Validação local concluída: Terraform 1.15.9/AWS 6.58.0, fmt -check, init -bac
 O Collector EKS envia logs de acesso do Gateway (mensagem fixa e campos técnicos) e 13 gauges de Gateway/Lambda/RDS ao mesmo exporter New Relic. Não há integração AWS adicional por polling no console, nova chave, alteração da Lambda ou recoleta de logs de aplicação. X-Ray continua independente.
 
 A role do Collector recebe somente FilterLogEvents no grupo do ambiente e GetMetricData regional; o bootstrap permanece igual. Após PRs, executar somente base-provision e seguir as [consultas NRQL e critérios de validação CloudWatch](CLOUDWATCH.md). Coleta e ingestão reais ainda pendentes. Cada restart relê cinco minutos de logs; métricas têm atraso de dez minutos, sem backfill. Confirmar última coleta antes do destroy do Gateway, que remove o grupo de logs.
+
+## Dashboard de operação persistente — 18/10/2026
+
+Definição JSON versionada e unidade Terraform local em [observability/newrelic](../observability/newrelic/README.md), fora dos workflows/destroys AWS. Vinte painéis de consulta e dois textos, ambiente hom/prd de seleção única e padrão hom; consultas HTTP e 23 métricas Kubernetes existentes. Sem dashboards de OS/integrações, alertas ou alterações de instrumentação nesta entrega.
+
+Usa uma User API Key autorizada a administrar dashboards, fornecida por NEW_RELIC_API_KEY no processo local; não reutilizar a Ingest - License dos Collectors. Account ID não é secreto. Estado remoto compartilhado e persistente, outputs somente GUID/permalink e prevent_destroy; mudanças por PR/plano salvo. Documentados os comandos de init, plan, apply posterior e verificação de ausência de drift.
+
+Preparação e consultas históricas hom/prd validadas; prd sem dados não é validação operacional. O dashboard ainda não foi criado: backend autenticado, plano remoto/aprovação, apply e layout visual permanecem pendentes. Não é necessário novo deploy da API ou infraestrutura para publicar o dashboard. A leitura histórica não elimina as ressalvas de cobertura dos access logs ou de representação diferente dos IDs xray.polling/OTLP.
+
+## Dashboard persistente de ordens de serviço — 18/10/2026
+
+A mesma [unidade Terraform local](../observability/newrelic/README.md#ordens-de-serviço--painéis-e-semântica) define **Mecânica — Ordens de serviço**, fonte `dashboards/orders.json.tftpl`, 15 consultas/dois textos. Reutiliza backend/provider/credencial e proteção de operação; não cria workflow ou estado paralelo. Outputs novos somente GUID/permalink de ordens. Cada dashboard tem seleção única hom/prd, padrão hom.
+
+Volume confirmado no período e por dia America/Sao_Paulo; médias de diagnóstico, execução, espera pela entrega separada por conclusão/recusa e serviço completo, em minutos e com amostras concluídas. Falhas técnicas de OS por operação separadas de falhas de medição após commit. Sem estoque de OSs abertas, dados pessoais, notificações ou indicadores de integrações. Média ponderada pelas amostras, não média das médias dos pods; total do serviço não espera entrega nem inclui recusa.
+
+Consultas históricas hom/prd conferidas na janela 18/10/2026 00:22:30–00:49:40 UTC: três criações no dia local 17/10; 2/1/2/1 amostras de diagnóstico/execução/entrega/serviço, coerentes com SQL salvo. Prd sem séries e ausência de falhas não comprovam esses cenários. SQL é exato por ocorrência; métricas possuem janelas, perdas possíveis e ausência de backfill. Sem amostras não equivale a duração zero ou saúde.
+
+Definição/consultas validadas; **não publicado**. Plano remoto/aprovação/apply e conferência visual posteriores. Se a unidade ainda não tiver sido publicada, esperar duas criações (operação e OS); se operação já existir, somente ordens, sem alteração em operação. Não é necessário subir o ambiente para publicar ou conferir dados retidos. Não houve apply AWS/New Relic nem mudanças nas aplicações/Collectors nesta entrega. Integrações, alertas e pendências de correlação permanecem separados.
+
+## Dashboard persistente de integrações e autenticação — 18/10/2026
+
+**Mecânica — Integrações e autenticação**: `dashboards/integrations.json.tftpl` e recurso Terraform integrations na [unidade persistente](../observability/newrelic/README.md#integrações-e-autenticação--painéis-e-semântica), com 24 consultas/dois textos. Mantém seleção única hom/prd (padrão hom), PUBLIC_READ_ONLY, prevent_destroy, backend/provider/credenciais existentes. Outputs novos somente GUID/permalink; nenhum workflow ou estado paralelo.
+
+Usa somente sinais existentes: invocações/categorias/latências/falhas técnicas da Lambda, POST/Authentication da API, 13 métricas CloudWatch Gateway/Lambda/RDS, notificações por tipo/modo e tabelas de logs técnicos de falha (até 100 registros). Não exibe corpo bruto/credenciais/dados de clientes ou segmentos X-Ray. Notificação simulated não é entrega; HTTP 500 tratado não equivale a AWS/Lambda Errors. 400/401 esperados não entram na taxa técnica. PostgreSQL/SSM/Secrets Manager ainda não têm contadores completos por tentativa/falha; RDS CPU/conexões não os substituem.
+
+Período recomendado 60 minutos, considerando atraso CloudWatch de dez minutos. Cada ponto AWS mostra última estatística de 60 s, concorrência mostra maior Maximum; não são totais/médias ponderadas do intervalo. Percentis vazios retornavam zero nativo: consultas corrigidas e conferidas para manter nulo sem amostras. Logs são diagnóstico parcial (referência 19/28 request IDs), sem derivar taxas ou afirmar união automática X-Ray/OTLP.
+
+Consultas históricas: 24 hom e 24 prd executadas. Na janela 15:40–16:10 UTC, autenticação com 8 invocações e login interno com 11, sem 5xx/falhas técnicas. As 13 estatísticas CloudWatch de 15:47–15:48 coincidiram com o snapshot documentado. Notificações 00:22:30–00:49:40: 11 tentativas simuladas concluídas, 9 status_changed/2 budget_available. Prd e falhas não ocorridas seguem sem comprovação operacional. Não houve tráfego, login/leitura de credencial AWS ou operações remotas de publicação.
+
+Terraform/JSON/consultas preparados, **não publicado**. E5.8 preparada no escopo disponível, com lacunas explícitas; plano salvo/revisão/apply, conferência visual e tráfego novo posteriores. Se nenhum dashboard tiver sido publicado, plano esperado cria três; preservar os que já existirem sem alterações. Alertas e instrumentação adicional permanecem separados.
+
+## Publicação dos dashboards por workflow — decisão de 18/10/2026
+
+O caminho padrão passa a ser **newrelic-provision**, manual e somente main, na [unidade persistente](../observability/newrelic/README.md#publicação-padrão-pelo-github-actions). Sem input hom/prd, três dashboards com filtro próprio, plan → approval → apply do plano salvo; nenhuma relação com os destroys AWS. Role nova do bootstrap somente para estado/lock S3; User API Key em Secret do Environment newrelic (separada da License Key dos Collectors). Account ID 8626152 é variável não secreta, capturada no plan para todo o fluxo.
+
+Antes da primeira execução, aplicar somente o plano salvo do bootstrap posteriormente aprovado; criar/proteger newrelic (main, variáveis AWS_NEW_RELIC_ROLE_ARN/NEW_RELIC_ACCOUNT_ID e Secret NEW_RELIC_API_KEY) e newrelic-approval (main, reviewer pknfelps, autorrevisão permitida, sem credenciais); publicar na main pelo fluxo de PR. Não deixar o primeiro dispatch criar Environments desprotegidos. O bootstrap permanece administrativo/manual; não é aplicado por este workflow.
+
+Plan/apply usam o mesmo SHA e artefato por ID da execução, retido sete dias. Aprovação sem OIDC/Secret; chave real só em plan/apply/conferência Terraform. Resumo expõe somente commit/Account ID/GUIDs/links. Após apply, plan de conferência sem aplicação: diferença ou erro falha, sem segundo apply/rollback. Plano obsoleto/artefato indisponível exige novo fluxo completo e nova aprovação. CI de PR usa apenas placeholder não secreto, sem OIDC/chave real ou consultas remotas; renderiza os três JSONs pelo Terraform.
+
+Actionlint/ShellCheck, Terraform bootstrap/New Relic, renderização offline Bash e revisão JSON/policies aprovados localmente. Environments, credenciais, bootstrap apply, publicação e layout visual permanecem pendentes. Não houve autenticação/alteração AWS, New Relic ou GitHub durante a implementação. Operação local alternativa permanece documentada, com o mesmo backend e sem paralelismo com a pipeline. Registros anteriores da publicação exclusivamente local são históricos; não exigem duplicar recursos/estado.
