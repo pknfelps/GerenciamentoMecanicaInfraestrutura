@@ -17,3 +17,13 @@ output "orders_dashboard_permalink" {
   description = "Link do dashboard de ordens de serviço no New Relic."
   value       = newrelic_one_dashboard_json.orders.permalink
 }
+
+output "integrations_dashboard_guid" {
+  description = "GUID do dashboard persistente de integrações e autenticação."
+  value       = newrelic_one_dashboard_json.integrations.guid
+}
+
+output "integrations_dashboard_permalink" {
+  description = "Link do dashboard de integrações e autenticação no New Relic."
+  value       = newrelic_one_dashboard_json.integrations.permalink
+}
