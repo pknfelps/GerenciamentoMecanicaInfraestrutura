@@ -2,6 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../base
+configMapGenerator:
+  - name: otel-collector-config
+    behavior: merge
+    files:
+      - collector-cloudwatch.yaml
 patches:
   - target:
       kind: Deployment
@@ -25,3 +30,9 @@ patches:
                     value: mecanica-hom-eks
                   - name: DEPLOYMENT_ENVIRONMENT
                     value: hom
+                  - name: GATEWAY_NAME
+                    value: mecanica-hom-gateway
+                  - name: AUTH_FUNCTION_NAME
+                    value: mecanica-hom-auth
+                  - name: DATABASE_INSTANCE_IDENTIFIER
+                    value: mecanica-hom-postgres
