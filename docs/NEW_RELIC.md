@@ -4,7 +4,7 @@
 
 **Decisão vigente:** New Relic é permanente nos deploys da base e autenticação. Removidos os toggles de workflow e parâmetros SAM; X-Ray continua independente. A configuração local da API e dos testes não foi alterada.
 
-Integração preparada para envio OTLP HTTP/protobuf de traces, métricas e logs para https://otlp.nr-data.net (HTTPS/443). Ingestão OTLP e X-Ray comprovadas em hom em 17/10/2026; [evidência e limites](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_HOM_2026-10-17.md). Prd e a nova coleta Kubernetes não foram comprovados. API → Collector Kubernetes e Lambda → extensão local continuam independentes.
+Integração preparada para envio OTLP HTTP/protobuf de traces, métricas e logs para https://otlp.nr-data.net (HTTPS/443). Ingestão OTLP e X-Ray comprovadas em hom em 17/10/2026; [evidência e limites](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_HOM_2026-10-17.md). Coleta/enriquecimento Kubernetes também comprovados em hom; [evidência](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_KUBERNETES_HOM_2026-10-17.md). Prd não foi comprovado. API → Collector Kubernetes e Lambda → extensão local continuam independentes.
 
 A chave é Ingest - License da conta US. Account ID não autentica o exporter e não precisa ser publicado em SSM. Os 100 GB informados pelo mantenedor são a franquia da conta, compartilhada pelo que ela recebe; não existe bloqueio automático por essa configuração. Acompanhar Data Management/consumo no New Relic antes e durante as janelas de validação. Dashboards, alertas de consumo e limites contratados devem ser conferidos na própria conta; não há garantia de custo zero na AWS.
 
@@ -60,7 +60,7 @@ Terraform fmt/init sem backend/validate, renderização Kustomize e validação 
 
 A imagem Contrib 0.151.0 não contém decouple; a layer oficial continua usando esse processor no YAML de produção. Não há overrides de teste ou prova automatizada de transporte. Ingestão, falhas de exportação, ciclo/fila/congelamento e comportamento dos Collectors serão conferidos operacionalmente na AWS. Testes funcionais HTTP/JWT/PostgreSQL e sanitização do console permanecem; todos os testes automatizados de telemetria, incluindo InMemory, foram removidos por decisão do mantenedor.
 
-Não acrescentados scripts, Operators, agentes, coleta stdout ou duplicação dos exporters. Somente o Compose/local de teste mantém debug, sem AWS/New Relic. Os deploys usam exclusivamente New Relic. Ingestão OTLP e X-Ray hom já comprovadas; coleta Kubernetes preparada localmente. Próximas conferências: implantação Kubernetes, dashboards/alertas, CloudWatch e correlação W3C/X-Ray.
+Não acrescentados scripts, Operators, agentes, coleta stdout ou duplicação dos exporters. Somente o Compose/local de teste mantém debug, sem AWS/New Relic. Os deploys usam exclusivamente New Relic. Ingestão OTLP e X-Ray hom já comprovadas; coleta Kubernetes/enriquecimento hom comprovados em 17/10/2026. Próximas conferências: dashboards/alertas, CloudWatch, correlação W3C/X-Ray e escopos ainda não exercitados.
 
 ## X-Ray nativo → New Relic — preparação declarativa
 
@@ -101,8 +101,14 @@ Conferir serviço/região, IDs dos traces, horários e atraso observado com os s
 - O marcador `newRelic.ingestPoint='xray.polling'` distingue este caminho do OTLP. A habilitação não adiciona exporter X-Ray aos Collectors nem duplica o envio OTLP existente. A união dos dois contextos e a análise de possíveis sobreposições permanecem pendentes.
 - Falha na integração não altera o fluxo de negócio nem o envio OTLP. Em ausência de spans, conferir conexão, região, permissão, tracing/amostragem nativa e janela de polling; não habilitar outros serviços nem imprimir credenciais como diagnóstico.
 
-**Estado atual:** ingestão e amostra de segmentos nativos comprovadas em hom; conteúdo inclui URL/IP e não recebe a sanitização OTLP. E5.3/E5.14 continuam parciais nos escopos restantes, incluindo correlação W3C/X-Ray e prd; receiver CloudWatch, dashboards e alertas ficam separados. A nova coleta Kubernetes está preparada localmente e aguarda base-provision/conferência. A instrumentação atual continua W3C e mantém extração X-Ray desabilitada. Não executar destroy como teste.
+**Estado atual:** ingestão e amostra de segmentos nativos comprovadas em hom; conteúdo inclui URL/IP e não recebe a sanitização OTLP. E5.3/E5.14 continuam parciais nos escopos restantes, incluindo correlação W3C/X-Ray e prd; receiver CloudWatch, dashboards e alertas ficam separados. A coleta Kubernetes já foi implantada/conferida em hom em 17/10/2026; prd e falhas/carga seguem pendentes. A instrumentação atual continua W3C e mantém extração X-Ray desabilitada. Não executar destroy como teste.
 
 Referências oficiais: [conexão AWS por polling](https://docs.newrelic.com/docs/infrastructure/amazon-integrations/connect/set-up-aws-api-polling/), [integração X-Ray](https://docs.newrelic.com/docs/infrastructure/amazon-integrations/aws-integrations-list/aws-x-ray-monitoring-integration/) e [ações/recursos IAM X-Ray](https://docs.aws.amazon.com/service-authorization/latest/reference/list_xray.html).
 
 Validação local concluída: Terraform 1.15.9/AWS 6.58.0, fmt -check, init -backend=false com provider em cache e validate aprovados. JSON gerado pelo terraform console revisado com Account ID fictício 1234567: trust 220 e policy 208 caracteres. Inputs vazio, zero, negativo e não numérico produziram o diagnóstico esperado de validação; valor positivo aceito. Console pode retornar código zero mesmo emitindo esse diagnóstico, por isso a conferência considerou a mensagem nativa. Evidências locais em artifacts/e5-xray-newrelic/validation.json e policies-fictitious-account.json; nenhum teste operacional/script novo, chamada AWS, plano ou apply.
+
+## Coleta CloudWatch — preparada localmente em 18/10/2026
+
+O Collector EKS envia logs de acesso do Gateway (mensagem fixa e campos técnicos) e 13 gauges de Gateway/Lambda/RDS ao mesmo exporter New Relic. Não há integração AWS adicional por polling no console, nova chave, alteração da Lambda ou recoleta de logs de aplicação. X-Ray continua independente.
+
+A role do Collector recebe somente FilterLogEvents no grupo do ambiente e GetMetricData regional; o bootstrap permanece igual. Após PRs, executar somente base-provision e seguir as [consultas NRQL e critérios de validação CloudWatch](CLOUDWATCH.md). Coleta e ingestão reais ainda pendentes. Cada restart relê cinco minutos de logs; métricas têm atraso de dez minutos, sem backfill. Confirmar última coleta antes do destroy do Gateway, que remove o grupo de logs.

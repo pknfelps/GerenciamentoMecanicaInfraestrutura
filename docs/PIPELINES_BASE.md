@@ -37,3 +37,11 @@ Publicação: revisar/aplicar plano adicional do bootstrap, aplicar base com ass
 Os overlays observability/hom e prd incluem ClusterRole/ClusterRoleBinding, habilitação de token somente no pod, Downward API e identificação por cluster/ambiente. A aplicação/restart/espera e remoção existentes abrangem esses recursos sem modificar workflows ou permissões IAM. RBAC de escopo de cluster também é removido pelo delete do overlay; não basta apagar o namespace isoladamente.
 
 Após o PR, executar base-provision e conferir coleta, RBAC/TLS, consumo e dados no New Relic conforme [Collector API](COLLECTOR_API.md). Não é necessário deploy dos consumidores. Instalação e saúde do processo não comprovam ingestão nem tornam E5.4/E5.12 concluídas.
+
+**Conferência hom — 17/10/2026:** base-provision run 39086883099/revisão 92238eb aplicado pelo mantenedor. Coleta Kubernetes e enriquecimento comprovados no New Relic, com comparação dos valores, duas amostras por minuto e Collector Ready sem reinícios/erros. Sem alteração de recursos/permissões durante a validação. E5.4/E5.12 comprovadas em hom; prd e carga permanecem separados. [Evidência](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_KUBERNETES_HOM_2026-10-17.md).
+
+## Coleta CloudWatch — 18/10/2026
+
+Workflows e inputs preservados. Após PR, executar somente base-provision para adicionar a policy read-cloudwatch da role Collector e sua descrição; Terraform vem antes dos overlays e restart já existentes. Plano salvo continua sujeito a aprovação, sem replan no apply. Não requer bootstrap, deploy API/auth, banco ou Gateway; ausência dos consumidores não cria dependência Terraform.
+
+Os overlays montam os dois YAMLs públicos; uma alteração isolada de ConfigMap precisa do restart existente. Base-destroy já remove Collector/configuração antes de excluir role/policies. Antes de iniciar gateway-destroy, encerrar o tráfego e confirmar última coleta/exportação, respeitando os dez minutos de atraso de métricas: o grupo de logs é excluído pelo Gateway. Sem espera automática nova. [Procedimento e limites](CLOUDWATCH.md). E5.14 permanece parcial até conferência implantada.

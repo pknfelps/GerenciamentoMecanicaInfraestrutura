@@ -33,6 +33,7 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/otelcol-contrib/collector.yaml
+            - --config=/etc/otelcol-contrib/collector-cloudwatch.yaml
           env:
             - name: GOMEMLIMIT
               value: 192MiB

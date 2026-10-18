@@ -2,11 +2,11 @@
 
 ## Estado e propriedade
 
-A infraestrutura administra `kubernetes/observability/base` e seus overlays `hom`/`prd`. A Kustomization é independente da raiz `kubernetes`. `base-provision` já aplica o overlay do ambiente, reinicia e aguarda o Collector; `base-destroy` remove esse mesmo overlay antes do EKS, incluindo ClusterRole/ClusterRoleBinding. Não há workflow novo ou alteração de IAM/Terraform nesta entrega.
+A infraestrutura administra `kubernetes/observability/base` e seus overlays `hom`/`prd`. A Kustomization é independente da raiz `kubernetes`. `base-provision` já aplica o overlay do ambiente, reinicia e aguarda o Collector; `base-destroy` remove esse mesmo overlay antes do EKS, incluindo ClusterRole/ClusterRoleBinding. A coleta Kubernetes não criou workflows ou IAM adicional. A entrega CloudWatch posterior acrescenta somente uma policy inline à role do Collector administrada pela base; [procedimento](CLOUDWATCH.md).
 
 **Comprovado em hom em 17/10/2026:** os três sinais OTLP da API/Lambda chegaram ao New Relic, incluindo métricas de negócio conferidas por SQL e `service.version` com o SHA da API. A integração nativa X-Ray também recebeu spans. [Evidência consolidada](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_HOM_2026-10-17.md).
 
-**Preparado localmente nesta entrega:** métricas Kubernetes e enriquecimento dos sinais OTLP. Renderização e validação do YAML não comprovam autorização, TLS, valores ou consumo da nova coleta no EKS. E5.4/E5.12 aguardam implantação e consulta no New Relic. Prd não foi validado.
+**Coleta Kubernetes comprovada em hom em 17/10/2026:** 23 métricas recebidas, quatro namespaces observados, valores comparados com Kubernetes/top e enriquecimento dos três sinais da API preservando serviço/versão/correlação. Collector Ready, zero reinícios, aproximadamente 2m CPU/55–56 MiB, sem erros RBAC/TLS/exportação na janela. Duas amostras/minuto na série conferida, sem duplicação observada. [Evidência e limites](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_KUBERNETES_HOM_2026-10-17.md). E5.4/E5.12 comprovadas no escopo hom; prd e carga não foram validados.
 
 ## Recursos e segurança
 
@@ -109,7 +109,7 @@ Para alteração isolada posterior, aplicar o overlay correto, reiniciar e aguar
 
 ## Consultas NRQL após implantação
 
-Filtrar sempre o cluster/ambiente. Uptime é uma soma cumulativa monotônica no receiver: consultar seu campo cumulative, preservado pelo New Relic, para obter segundos de vida do nó, sem confundir com o incremento entre amostras. [Tratamento de métricas cumulativas](https://docs.newrelic.com/docs/data-apis/understand-data/metric-data/cumulative-metrics/). Estas consultas ainda não são evidência de ingestão da nova coleta:
+Filtrar sempre o cluster/ambiente. Uptime é uma soma cumulativa monotônica no receiver: consultar seu campo cumulative, preservado pelo New Relic, para obter segundos de vida do nó, sem confundir com o incremento entre amostras. [Tratamento de métricas cumulativas](https://docs.newrelic.com/docs/data-apis/understand-data/metric-data/cumulative-metrics/). As famílias de consultas foram usadas na conferência de hom; os valores e a janela estão na evidência acima. Reexecutar para conferir o estado atual:
 
 ```sql
 SELECT latest(`k8s.node.cpu.usage`), latest(`k8s.node.allocatable_cpu`),
@@ -152,6 +152,12 @@ FACET `k8s.namespace.name`, `k8s.deployment.name` LIMIT MAX SINCE 15 minutes ago
 
 Para logs/traces de uma chamada nova, verificar `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.node.name` e `k8s.deployment.name`, junto de `service.name`, `service.version` e `trace.id`. Não usar dimensões do cluster para reatribuir as métricas da API.
 
-CloudWatch, correlação W3C/X-Ray, dashboards, alertas, testes de carga e mudanças da topologia continuam separados. E5.4/E5.12 ficam preparadas localmente até esta conferência posterior.
+CloudWatch, correlação W3C/X-Ray, dashboards, alertas, testes de carga e mudanças da topologia continuam separados. E5.4/E5.12 comprovadas em hom após a implantação de 17/10/2026; prd, falhas/saturação e expansão de nós continuam pendentes.
 
 Referências da versão fixada: [kubeletstats](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.161.0/receiver/kubeletstatsreceiver), [k8s_cluster](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.161.0/receiver/k8sclusterreceiver) e [k8sattributes](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.161.0/processor/k8sattributesprocessor).
+
+## Coleta CloudWatch — complemento de 18/10/2026
+
+O mesmo Deployment passa a carregar collector.yaml e collector-cloudwatch.yaml do ConfigMap estável. Overlays hom/prd acrescentam somente o grupo Gateway e nomes previsíveis dos recursos consultados. Duas pipelines próprias coletam access logs e 13 métricas AWS sem k8sattributes/resource/cluster, reutilizando os limites/exporter existentes. Nenhuma alteração nos caminhos OTLP/Kubernetes ou em suas frequências. [Campos, estatísticas, IAM, retomada, validação local e conferência posterior](CLOUDWATCH.md).
+
+A identidade Pod Identity agora lê também CloudWatch: FilterLogEvents no grupo exato do ambiente e GetMetricData regional. Não altera o RBAC Kubernetes. Base-provision aplica essas permissões antes de reiniciar o Collector. Implantação/ingestão CloudWatch pendentes; a conferência anterior de hom continua restrita aos sinais então implantados.

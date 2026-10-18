@@ -32,7 +32,7 @@ Parte 6 da autenticacao: bootstrap prepara role CI de leitura exclusiva do pacot
 
 Collector Kubernetes administrado pela infraestrutura em kubernetes/observability/base, com overlays hom/prd. base-provision sempre aplica o overlay do ambiente, reinicia e aguarda rollout; base-destroy remove o mesmo overlay antes do EKS. O destino de produção é sempre New Relic; credencial no Secrets Manager e bootstrap aplicado são pré-requisitos. A API envia ao endpoint OTLP interno e mantém sua ativação no manifesto (hom habilitado; prd ainda conforme sua configuração versionada). Não há chave New Relic na aplicação.
 
-Métricas de nós/pods/containers e disponibilidade, enriquecimento Kubernetes e RBAC somente leitura preparados e validados localmente em 17/10/2026. Implantar pelo base-provision existente; coleta a cada 30 segundos, lista explícita de métricas, TLS kubelet verificado e cobertura de um nó. E5.4/E5.12 ainda dependem de dados reais. [Métricas, permissões, NRQL e conferência](docs/COLLECTOR_API.md).
+Métricas de nós/pods/containers e disponibilidade, enriquecimento Kubernetes e RBAC somente leitura implantados e comprovados em hom em 17/10/2026: 23 métricas no New Relic, comparação com kubectl top/estado e sinais da API enriquecidos sem alterar serviço/versão/correlação. Collector Ready, zero reinícios, cerca de 2m CPU/55–56 MiB. Coleta a cada 30 segundos, TLS verificado e cobertura kubelet de um nó. E5.4/E5.12 comprovadas em hom; prd/carga continuam pendentes. [Métricas, permissões, NRQL e conferência](docs/COLLECTOR_API.md).
 
 ## X-Ray nativo — E5
 
@@ -49,3 +49,7 @@ A integração nativa **X-Ray → New Relic** também está aplicada pelo bootst
 base-destroy verifica somente o banco antes do plan e novamente antes de remover qualquer manifesto ou aplicar o plano salvo. RDS em deleting, DB subnet group ou SG do banco bloqueiam imediatamente. API/auth são verificadas pelo database-destroy; Gateway é verificado pelos destroys de API/auth. Falhas de consulta bloqueiam. Gateway destroy permanece inalterado.
 
 O bootstrap prepara policies gerenciadas de inspeção para base/API/auth/banco hom/prd e a autorização da base para associar AmazonEKSViewPolicy à pipeline do banco somente em default. A base declara essa associação separada do acesso Edit em database-init. Aplicar bootstrap e base antes de usar os workflows novos. [Procedimento](docs/PIPELINES_BASE.md). Sem aplicação AWS nesta implementação.
+
+## Coleta CloudWatch — E5
+
+Preparada e validada localmente em 18/10/2026: logs de acesso do Gateway e 13 métricas essenciais Gateway/Lambda/RDS pelo Collector existente. Retomada dos últimos cinco minutos em cada inicialização, sem persistência ou deduplicação; consultas de métricas a cada minuto, com atraso de dez minutos. Terraform da base administra somente a policy adicional de leitura da role do Collector e sua descrição. Workflows/bootstrap/API/Lambda preservados. Após PRs, executar somente base-provision e conferir ingestão em hom; E5.14 permanece parcial. [Configuração, IAM, recuperação, NRQL e descarte](docs/CLOUDWATCH.md).
