@@ -2,7 +2,7 @@
 
 Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica — Operação da API e Kubernetes**, uma página com 20 painéis de consulta e dois blocos de orientação. Fonte: `dashboards/operations.json.tftpl`; recurso `newrelic_one_dashboard_json.operations`. Acrescenta **Mecânica — Ordens de serviço**, uma página com 15 consultas e dois blocos de orientação, em `dashboards/orders.json.tftpl`/`newrelic_one_dashboard_json.orders`. Acrescenta **Mecânica — Integrações e autenticação**, uma página com 24 consultas/dois textos, em `dashboards/integrations.json.tftpl`/`newrelic_one_dashboard_json.integrations`. Cada dashboard tem seu próprio filtro hom/prd.
 
-**Estado da entrega:** definição e consultas históricas validadas em 18/10/2026. Dashboards ainda não publicados; plano remoto, apply e conferência visual dependem de autorização posterior. Não há workflow novo nem inclusão nos workflows existentes.
+**Estado da entrega:** definição e consultas históricas validadas em 18/10/2026. Dashboards ainda não publicados; plano remoto, apply e conferência visual dependem de autorização posterior. O workflow manual `newrelic-provision`, somente main, está preparado: plan → aprovação → apply do plano salvo. CI valida/renderiza esta unidade sem credenciais reais. Bootstrap/Environments/Secret e execução remota ainda pendentes.
 
 ## Identidade, propriedade e estado
 
@@ -19,9 +19,9 @@ Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica 
 
 A **User API Key** administra dashboards e é diferente da **Ingest - License Key**, usada pelos Collectors para enviar telemetria. Esta unidade não lê o Secret de ingestão nem modifica IAM/Secrets Manager.
 
-O mantenedor deve obter uma User API Key de um usuário autorizado a criar/atualizar dashboards na conta escolhida. Fornecer somente ao processo local por `NEW_RELIC_API_KEY`. Não enviar a chave no chat, versionar, colocar em tfvars/backend, usar `-var`, imprimir o ambiente ou ativar `TF_LOG` durante operações autenticadas.
+O mantenedor deve obter uma User API Key de um usuário autorizado a criar/atualizar dashboards na conta escolhida. Cadastrar no GitHub como Secret `NEW_RELIC_API_KEY` do Environment `newrelic`; em operação local alternativa, fornecer somente ao processo por essa variável. Não enviar a chave no chat, versionar, colocar em tfvars/backend, usar `-var`, imprimir o ambiente ou ativar `TF_LOG` durante operações autenticadas.
 
-A autenticação AWS é usada somente pelo backend S3, com a cadeia padrão de credenciais local e acesso ao objeto de estado/lock. Não há provider AWS nesta unidade, role nova ou mudança de permissões. Se o perfil escolhido não tiver acesso, interromper e revisar a identidade; não alterar policies automaticamente.
+A autenticação AWS é usada somente pelo backend S3, com a cadeia padrão de credenciais local e acesso ao objeto de estado/lock. Não há provider AWS nesta unidade. O workflow usa a role dedicada `mecanica-newrelic-github`, declarada no bootstrap, exclusivamente para estado/lock; a alternativa local usa a identidade autorizada do mantenedor. Se o perfil escolhido não tiver acesso, interromper e revisar a identidade; não alterar policies automaticamente.
 
 ## Validação local sem autenticação
 
@@ -51,7 +51,48 @@ jsondecode(templatefile("C:/caminho/GerenciamentoMecanicaInfraestrutura/observab
 
 A renderização resolve somente o Account ID; `{{environment}}` permanece para substituição nativa pelo New Relic. Não criar scripts para gerar/publicar o JSON. Ao alterar a versão do provider, regenerar o lockfile com `terraform providers lock -platform=windows_amd64 -platform=linux_amd64` e revisar seus checksums.
 
-## Publicação posterior — somente após autorização
+## Publicação padrão pelo GitHub Actions
+
+Workflow [.github/workflows/newrelic-provision.yml](../../.github/workflows/newrelic-provision.yml), somente `workflow_dispatch` na **main**, sem input hom/prd. Os três dashboards são compartilhados e possuem seus filtros de ambiente. A fila `newrelic-dashboards`, sem cancelamento em andamento, coordena as execuções deste workflow; não coordena comandos locais. Não executar Terraform local em paralelo; o lock S3 continua ativo.
+
+### Preparação obrigatória antes da primeira execução
+
+1. Revisar/aprovar e aplicar o plano salvo adicional do bootstrap. Esperado: role `mecanica-newrelic-github`, policy `newrelic-state-access` e output `newrelic_pipeline_role_arn`; outros diffs exigem revisão própria. Não usar este workflow para aplicar o bootstrap.
+2. Criar os Environments **antes de disparar**: referenciar Environment inexistente pode criá-lo sem a proteção desejada.
+3. Publicar o workflow na main pelo fluxo normal de PR; develop passa pelo CI, mas não publica dashboards.
+
+| Environment | Configuração |
+|---|---|
+| `newrelic` | Branch main somente, sem tags. Variável `AWS_NEW_RELIC_ROLE_ARN` com o output do bootstrap; variável `NEW_RELIC_ACCOUNT_ID=8626152`; Secret `NEW_RELIC_API_KEY` com uma User API Key autorizada a administrar os dashboards |
+| `newrelic-approval` | Branch main somente, sem tags; reviewer `pknfelps`, autorrevisão permitida. Não cadastrar credenciais, secrets ou variáveis AWS/New Relic |
+
+Usar usuário autorizado também a editar os dashboards já existentes; permissões PUBLIC_READ_ONLY não dão edição a todos os usuários. A chave deve ser cadastrada pelo mantenedor diretamente no GitHub, sem enviá-la no chat. Não usar License Key de ingestão, AWS Secrets Manager ou tfvars para essa credencial. Não cadastrar cópias desnecessárias da User API Key como repository/organization secret: este workflow espera a credencial no Environment `newrelic`.
+
+### Plano, aprovação e aplicação
+
+- **plan:** checkout do SHA exato da execução; checks de repositório/main/configuração; OIDC para conta 121754142617/us-east-1; Terraform 1.15.9, provider/lockfile existentes, workspace default e backend.hcl. Init com lockfile readonly, fmt/validate e `plan -out=tfplan -lock-timeout=60s`. A conta positiva validada fica registrada como output do job, usada pelo plano e pelo apply/conferência, mesmo se a variável do Environment mudar durante a aprovação.
+- O plano binário e `tfplan.txt` são os únicos arquivos enviados pelo upload-artifact, retidos por sete dias. Revisar o texto/commit/Account ID antes de aprovar. Sem dashboards anteriores, esperar três criações; os existentes não devem mudar nesta primeira publicação do workflow. O artefato contém configuração/estado planejado; não publicar externamente nem incluir .terraform, credenciais ou tfvars no upload.
+- **approval:** Environment `newrelic-approval`, `permissions: {}`, sem checkout, autenticação AWS, User API Key ou acesso aos artefatos pelo job. A revisão é feita pelo mantenedor no plano do job anterior.
+- **apply:** checkout do mesmo SHA, autenticação nova e download pelo ID retornado pelo plan desta execução; init readonly e `terraform apply ... tfplan`. Não recria o plano antes do apply. Resumo com commit, Account ID e GUIDs/permalinks dos três dashboards.
+- Conferência posterior executa `plan -detailed-exitcode`, sem salvar/aplicar outro plano: 0 confirma ausência de diferenças; 2 falha com diagnóstico de divergência; demais erros também falham. Não há rollback/reparo automático.
+
+A User API Key real existe no ambiente apenas dos passos Create saved plan, Apply approved plan e Check for remaining changes. Validate usa placeholder não secreto; os passos de aprovação, autenticação OIDC, upload/download, show e outputs não recebem a chave. O provider lê a chave do processo; ela não é argumento Terraform, variável TF_VAR, arquivo ou output. Não ativar TF_LOG, imprimir ambiente ou adicionar headers/chave aos diagnósticos.
+
+Plano obsoleto, credencial inválida, diferença de estado ou artefato indisponível/expirado interrompe o fluxo. Corrigir a causa e iniciar **nova execução completa**, com novo plano/revisão/aprovação; não repetir somente o apply nem gerar outro plano dentro dele. O lock permanece necessário em plan/apply/conferência; não forçar unlock como recuperação automática.
+
+### Acesso AWS e limites
+
+Role persistente em `/mecanica/pipelines/`, confiança no OIDC existente com audience sts.amazonaws.com e subject exato do repositório/Environment newrelic. A main é restringida no Environment e nos checks dos dois jobs, sem inventar claim OIDC ref. A policy permite GetBucketLocation no bucket existente, ListBucket com prefixos do estado/lock/enumeração de workspaces da unidade, Get/Put no estado exato e Get/Put/Delete somente no .tflock. Não permite apagar estado, ler outros estados, Secrets/artefatos ou provisionar AWS. O ARN é conferido antes de assumir a role; allowed-account-ids limita a conta.
+
+Nenhum workflow de destroy, input hom/prd, dependência de base/API/Lambda/banco/Gateway ou mudança dos dashboards/queries. O estado S3 e os dashboards continuam persistentes e protegidos. As permissões OIDC/S3/New Relic e a execução do workflow precisam de conferência posterior real; validação local não as comprova.
+
+### Validação local do workflow — 18/10/2026
+
+Actionlint **1.7.12** com ShellCheck **0.11.0** aprovou newrelic-provision e CI alterado. Actions fixadas por SHA; a referência v4 de azure/setup-kubectl foi conferida no repositório oficial antes de fixar. Bootstrap: fmt/init sem backend/validate aprovados; JSON nativo de trust/permissões renderizado/revisado (quatro statements, 886 caracteres na policy inline com os valores deste projeto, abaixo do limite).
+
+O passo offline novo do CI foi executado localmente em Bash, com placeholder e sem backend: fmt/init/validate New Relic e renderização dos três templates aprovados. Nenhuma chave/OIDC é usada no CI de PR, que mantém contents:read. Preservados templates, recursos/provider/backend/lockfile New Relic. Evidências locais ignoradas na API: `artifacts/newrelic-workflow/`. Sem login, plano remoto, apply, chamada AWS/New Relic, configuração GitHub ou execução remota; publicação/conferência visual continuam pendentes.
+
+## Operação local alternativa — somente após autorização
 
 Não é necessário subir API, Lambda, banco ou Gateway para publicar o dashboard ou consultar dados históricos ainda retidos. Preparar autenticação AWS local e a User API Key. Em PowerShell 7, a leitura mascarada abaixo evita incluir o valor no histórico do comando:
 

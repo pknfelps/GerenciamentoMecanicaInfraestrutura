@@ -8,7 +8,7 @@ AWS deste repositório em Terraform; Service e namespace em manifestos Kubernete
 | terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
 | kubernetes | Service NodePort e namespace database-init; Collector New Relic e coleta Kubernetes em Kustomization independente |
 | gateway | REST API Regional, VPC Link V2, integrações API/Lambda, logs e SSM próprios |
-| observability/newrelic | Dashboards persistentes de operação, OS e integrações/autenticação, JSON versionado/Terraform local; independentes dos destroys AWS |
+| observability/newrelic | Dashboards persistentes de operação, OS e integrações/autenticação, JSON versionado/Terraform com publicação manual via workflow; independentes dos destroys AWS |
 
 Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP comprovadas em hom em 17/10/2026; prd não validado.
 
@@ -57,6 +57,10 @@ Preparada e validada localmente em 18/10/2026: logs de acesso do Gateway e 13 m�
 
 ## Dashboards como código — E5
 
-Unidade independente em [observability/newrelic](observability/newrelic/README.md): dashboards API/Kubernetes (20 consultas), Ordens de serviço (15) e Integrações/autenticação (24), dois blocos explicativos por dashboard e filtro hom/prd (padrão hom), provider New Relic 3.99.3 e estado S3 shared/newrelic/terraform.tfstate. Não participa de base-provision/base-destroy nem cria workflow. Usa User API Key apenas no ambiente do processo; a License Key de ingestão permanece exclusiva dos Collectors.
+Unidade independente em [observability/newrelic](observability/newrelic/README.md): dashboards API/Kubernetes (20 consultas), Ordens de serviço (15) e Integrações/autenticação (24), dois blocos explicativos por dashboard e filtro hom/prd (padrão hom), provider New Relic 3.99.3 e estado S3 shared/newrelic/terraform.tfstate. Não participa de base-provision/base-destroy. O workflow manual newrelic-provision, somente main, prepara plano salvo → aprovação newrelic-approval → apply do mesmo plano. Environment newrelic guarda User API Key/Account ID e ARN da role OIDC restrita ao backend; a License Key de ingestão permanece exclusiva dos Collectors. CI valida/renderiza sem credenciais reais.
 
 Definição e consultas históricas validadas em 18/10/2026; publicação ainda não realizada. Plano remoto/aplicação exigem autorização posterior, sem necessidade de subir API/EKS para consultar o histórico retido. Estado/dashboard persistem nos descartes AWS; prevent_destroy habilitado. OS inclui volume diário em São Paulo, durações concluídas em minutos com amostras e falhas de processamento/medição. As 30 consultas hom/prd de OS foram conferidas com a janela histórica 18/10 00:22:30–00:49:40 UTC e a evidência SQL; prd sem dados não é comprovação operacional. Integrações/autenticação acrescenta os sinais existentes de login, Lambda, 13 métricas CloudWatch, notificações e logs técnicos limitados; 48 consultas hom/prd conferidas com evidências históricas, sem tráfego novo. A definição dos três dashboards está preparada, ainda sem publicação. Contadores completos por integração PostgreSQL/SSM/Secrets Manager, alertas e pendências X-Ray/logs continuam separados.
+
+### Publicação dos dashboards pelo workflow — 18/10/2026
+
+Workflow, role/policy do bootstrap e CI offline preparados/validados localmente. Antes da primeira execução: plano do bootstrap revisado/aprovado/aplicado → Environments newrelic/newrelic-approval protegidos e variáveis/Secret cadastrados → PR/main → newrelic-provision/revisão/aprovação. Fila compartilhada, workspace default, artefatos sete dias, apply somente plano salvo e conferência posterior sem reparo automático. Não houve execução remota, configuração de GitHub ou apply nesta entrega. [Preparação, credenciais e operação](observability/newrelic/README.md#publicação-padrão-pelo-github-actions). Não é necessário subir o ambiente; não executar alternativa local simultaneamente.

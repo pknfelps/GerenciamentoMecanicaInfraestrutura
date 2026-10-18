@@ -1,0 +1,190 @@
+name: newrelic-provision
+run-name: newrelic-provision / ${{ github.ref_name }} / ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: newrelic-dashboards
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+    working-directory: observability/newrelic
+
+env:
+  AWS_REGION: us-east-1
+  AWS_PAGER: ''
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  TF_WORKSPACE: default
+  CHECKPOINT_DISABLE: '1'
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: newrelic
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      account_id: ${{ steps.configuration.outputs.account_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check repository, branch and configuration
+        id: configuration
+        env:
+          NEW_RELIC_ACCOUNT_ID: ${{ vars.NEW_RELIC_ACCOUNT_ID }}
+          AWS_NEW_RELIC_ROLE_ARN: ${{ vars.AWS_NEW_RELIC_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = pknfelps/GerenciamentoMecanicaInfraestrutura
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo '::error::Execute newrelic-provision somente na main.'
+            exit 1
+          fi
+          [[ "$NEW_RELIC_ACCOUNT_ID" =~ ^[1-9][0-9]*$ ]]
+          test "$AWS_NEW_RELIC_ROLE_ARN" = arn:aws:iam::121754142617:role/mecanica/pipelines/mecanica-newrelic-github
+          printf 'account_id=%s\n' "$NEW_RELIC_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_NEW_RELIC_ROLE_ARN }}
+          allowed-account-ids: '121754142617'
+          role-session-name: newrelic-plan-${{ github.run_id }}-${{ github.run_attempt }}
+      - run: terraform init -backend-config=backend.hcl -lockfile=readonly
+      - run: terraform fmt -check
+      - name: Validate Terraform configuration
+        env:
+          NEW_RELIC_API_KEY: local-validation-only-not-a-real-key
+        run: terraform validate -no-color
+      - name: Create saved plan
+        env:
+          TF_VAR_new_relic_account_id: ${{ steps.configuration.outputs.account_id }}
+          NEW_RELIC_API_KEY: ${{ secrets.NEW_RELIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NEW_RELIC_API_KEY" ]; then
+            echo '::error::Cadastre NEW_RELIC_API_KEY no Environment newrelic.'
+            exit 1
+          fi
+          terraform plan -out=tfplan -no-color -lock-timeout=60s
+      - name: Present saved plan
+        run: |
+          set -euo pipefail
+          terraform show -no-color tfplan | tee tfplan.txt
+          {
+            printf 'Commit: %s\n' "$GITHUB_SHA"
+            printf 'New Relic Account ID: %s\n' '${{ steps.configuration.outputs.account_id }}'
+            echo 'Revise tfplan.txt antes de aprovar. O apply usara exclusivamente o plano salvo.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: artifact
+        with:
+          name: newrelic-provision-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            observability/newrelic/tfplan
+            observability/newrelic/tfplan.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  approval:
+    needs: plan
+    runs-on: ubuntu-24.04
+    environment: newrelic-approval
+    permissions: {}
+    steps:
+      - run: echo 'Plano desta execucao aprovado pelo Environment protegido.'
+        working-directory: ${{ github.workspace }}
+
+  apply:
+    needs: [plan, approval]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: newrelic
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      TF_VAR_new_relic_account_id: ${{ needs.plan.outputs.account_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check repository and branch
+        env:
+          AWS_NEW_RELIC_ROLE_ARN: ${{ vars.AWS_NEW_RELIC_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = pknfelps/GerenciamentoMecanicaInfraestrutura
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$AWS_NEW_RELIC_ROLE_ARN" = arn:aws:iam::121754142617:role/mecanica/pipelines/mecanica-newrelic-github
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.9
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_NEW_RELIC_ROLE_ARN }}
+          allowed-account-ids: '121754142617'
+          role-session-name: newrelic-apply-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          path: observability/newrelic
+          merge-multiple: true
+      - run: terraform init -backend-config=backend.hcl -lockfile=readonly
+      - name: Apply approved plan
+        env:
+          NEW_RELIC_API_KEY: ${{ secrets.NEW_RELIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$NEW_RELIC_API_KEY"
+          test -f tfplan
+          terraform apply -no-color -lock-timeout=60s tfplan
+      - name: Show dashboard identifiers and links
+        run: |
+          set -euo pipefail
+          {
+            printf 'Commit aplicado: %s\n' "$GITHUB_SHA"
+            printf 'New Relic Account ID: %s\n' "$TF_VAR_new_relic_account_id"
+            for dashboard in operations orders integrations; do
+              guid="$(terraform output -raw "${dashboard}_dashboard_guid")"
+              permalink="$(terraform output -raw "${dashboard}_dashboard_permalink")"
+              printf -- '- %s: %s; %s\n' "$dashboard" "$guid" "$permalink"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Check for remaining changes
+        env:
+          NEW_RELIC_API_KEY: ${{ secrets.NEW_RELIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$NEW_RELIC_API_KEY"
+          set +e
+          terraform plan -detailed-exitcode -no-color -lock-timeout=60s
+          status=$?
+          set -e
+          case "$status" in
+            0) echo 'Nenhuma diferenca pendente.' >> "$GITHUB_STEP_SUMMARY" ;;
+            2) echo '::error::Restaram diferencas depois do apply; revise antes de uma nova execucao.'; exit 1 ;;
+            *) echo '::error::Falha na conferencia posterior; nenhum segundo plano foi aplicado.'; exit "$status" ;;
+          esac
+      - name: Explain recovery after failure
+        if: failure()
+        run: |
+          echo '::error::Corrija a causa e execute novamente newrelic-provision completo, com nova revisao e aprovacao. Nao replaneje/aplique dentro deste job. Plano obsoleto ou artefato indisponivel nao sera substituido automaticamente.'

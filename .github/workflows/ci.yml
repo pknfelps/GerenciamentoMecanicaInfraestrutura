@@ -12,14 +12,14 @@ jobs:
       TF_IN_AUTOMATION: 'true'
       TF_INPUT: 'false'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: 1.15.9
           terraform_wrapper: false
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@c0c8b32d33a5244f1e5947304550403b63930415 # v4
         with:
           version: v1.36.0
       - name: Format, validate and render
@@ -36,3 +36,17 @@ jobs:
           kubectl kustomize kubernetes
           kubectl kustomize kubernetes/observability/hom
           kubectl kustomize kubernetes/observability/prd
+      - name: Validate New Relic configuration and render dashboards offline
+        env:
+          NEW_RELIC_API_KEY: local-validation-only-not-a-real-key
+          TF_WORKSPACE: default
+        run: |
+          set -euo pipefail
+          terraform -chdir=observability/newrelic fmt -check -recursive
+          terraform -chdir=observability/newrelic init -backend=false -lockfile=readonly
+          terraform -chdir=observability/newrelic validate -no-color
+          render_directory="$(mktemp -d "$RUNNER_TEMP/newrelic-render.XXXXXX")"
+          for dashboard in operations orders integrations; do
+            printf 'jsondecode(templatefile("%s/observability/newrelic/dashboards/%s.json.tftpl", {account_id=8626152}))\n' \
+              "$GITHUB_WORKSPACE" "$dashboard" | terraform -chdir="$render_directory" console -no-color > /dev/null
+          done
