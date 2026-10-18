@@ -21,3 +21,7 @@ patches:
                     value: us-east-1
                   - name: NEW_RELIC_LICENSE_KEY_SECRET
                     value: /mecanica/prd/observability/newrelic-license-key
+                  - name: K8S_CLUSTER_NAME
+                    value: mecanica-prd-eks
+                  - name: DEPLOYMENT_ENVIRONMENT
+                    value: prd

@@ -19,7 +19,7 @@ spec:
         app.kubernetes.io/part-of: mecanica-observability
     spec:
       serviceAccountName: otel-collector
-      automountServiceAccountToken: false
+      automountServiceAccountToken: true
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
@@ -36,6 +36,10 @@ spec:
           env:
             - name: GOMEMLIMIT
               value: 192MiB
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           ports:
             - name: otlp-http
               containerPort: 4318
