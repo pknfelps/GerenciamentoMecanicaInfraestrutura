@@ -1,5 +1,17 @@
 # Bootstrap administrativo persistente
 
+## Pipeline dos dashboards New Relic — 18/10/2026
+
+`newrelic-pipeline.tf` declara a role persistente `mecanica-newrelic-github`, caminho `/mecanica/pipelines/`, com prevent_destroy, trust no provider OIDC existente (aud sts.amazonaws.com; subject exato infra:environment:newrelic) e uma policy inline exclusiva do backend dos dashboards. Não altera/amplia as roles base/Gateway; não administra recursos New Relic ou versões de Secrets. A restrição main é configurada no Environment GitHub e conferida no workflow; não se depende de claim ref personalizada.
+
+Permissões: GetBucketLocation no bucket de estado; ListBucket restrito ao estado/lock e ao prefixo de enumeração shared/newrelic/workspaces/; Get/Put em shared/newrelic/terraform.tfstate; Get/Put/Delete em shared/newrelic/terraform.tfstate.tflock. Sem DeleteObject no estado, GetObject em outros estados, IAM, Secrets, artefatos ou provisionamento AWS. Criptografia AES256/lockfile/backend preservados. Role e estado não pertencem ao destroy de hom/prd.
+
+Output `newrelic_pipeline_role_arn` preenche a variável `AWS_NEW_RELIC_ROLE_ARN` do Environment newrelic. O Account ID New Relic 8626152 será variável desse Environment, e a User API Key será Secret cadastrado manualmente pelo mantenedor no GitHub, nunca no bootstrap/estado. A variável new_relic_account_id do bootstrap continua sendo a configuração da confiança X-Ray, independente da credencial de publicação.
+
+Aplicação posterior: gerar plano salvo com os tfvars locais existentes, revisar nova role/policy/output e qualquer outro diff, obter aprovação e aplicar somente o plano aprovado. Depois criar/proteger os Environments antes de disparar o workflow; reviewer pknfelps/autorrevisão permitida em newrelic-approval, nenhuma credencial nesse Environment. [Procedimento completo](../observability/newrelic/README.md#publicação-padrão-pelo-github-actions).
+
+fmt/init sem backend/validate e JSON das policies conferidos localmente, inline com quatro statements/886 caracteres nos valores deste projeto. Nenhum login, plano AWS, apply ou configuração remota nesta entrega. As permissões reais/OIDC e o primeiro plan da pipeline ainda exigem validação após aplicação.
+
 ## Decisão SAM da autenticação — 2026-10-11
 
 [ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md) define SAM/CloudFormation para os recursos auth, sem migrar este bootstrap. Role/policies auth-runtime continuam persistentes e serão reutilizadas pela stack; sua exclusão não fará parte do destroy auth, preservando a limpeza posterior de ENIs. Buckets/OIDC/role CI e IAM das pipelines continuam Terraform.
@@ -11,6 +23,8 @@ Template/workflows SAM com ZIP estão implementados e validados localmente. Inve
 Mantém estados S3 versionados/locking, artefatos imutáveis, ECR, OIDC e permissões por componente/ambiente. Não pertence ao descarte normal de hom/prd. Nenhum workflow administrativo novo foi criado.
 
 Usar Terraform 1.15.9, provider lock versionado, credencial administrativa autenticada na conta 121754142617/us-east-1. Preservar backend.hcl/backend.s3.tf e bootstrap.tfvars locais existentes; não versionar estado, planos ou credenciais. O exemplo de tfvars documenta inputs não secretos.
+
+O bootstrap agora exige também `new_relic_account_id`: preencher o Account ID real do New Relic no tfvars local antes do próximo plan. A variável só configura a confiança da integração X-Ray; não recebe a License Key.
 
 ```powershell
 terraform init -backend-config=backend.hcl -lockfile=readonly
@@ -82,3 +96,120 @@ Plano original em artifacts/bootstrap-gateway/bootstrap-gateway.tfplan: 10 cria�
 ### Resultado do apply Gateway — 12/10/2026
 
 Plano aprovado aplicado parcialmente: nove criações/quatro alterações IAM concluídas, configuração regional de logs falhou. CloudTrail comprovou CreateLogGroup negado em /aws/apigateway/welcome, usado pela AWS para validar a role. Código acrescenta apenas esse grupo/streams à policy regional; as pipelines Gateway continuam restritas aos respectivos ambientes. Plano complementar artifacts/bootstrap-gateway/bootstrap-gateway-welcome.tfplan aprovado e aplicado: uma criação/uma alteração/zero exclusões. Configuração regional aponta à role mecanica-apigateway-logs, conferida por GetAccount; plano posterior retornou No changes. Evidências welcome-apply.log, post-welcome-account.json e post-welcome-plan.txt no mesmo diretório. Não reaplicar o plano original após a alteração de estado. [Revisão local](../artifacts/bootstrap-gateway/REVISAO-WELCOME.md).
+
+## Correção da autorização Gateway → NLB — 12/10/2026
+
+base-provision falhou em AuthorizeSecurityGroupEgress no recurso security-group-rule/*: a autorização do Security Group existia, mas faltava a autorização da regra criada com tags. O bootstrap acrescenta somente esse Allow, exigindo Project, Environment, Component=gateway-network e ManagedBy=Terraform. Mantém a restrição ao grupo reservado e o isolamento hom/prd.
+
+Novo plano em artifacts/bootstrap-gateway-egress/bootstrap-gateway-egress.tfplan: zero criações, duas alterações de policies inline e zero exclusões. SHA-256 4D1D9D7A1B40ED8AD8516A772EA21AECF41253BE8D5383CBE531DD675EE5EEA1. Terraform fmt/validate, duas policies Access Analyzer sem findings e 26 decisões IAM conferidas. Plano aprovado e aplicado: zero criações, duas alterações e zero exclusões. Policies hom/prd conferidas na AWS; simulação nas roles reais permitiu a criação nos recursos Security Group e Security Group Rule. Plano posterior retornou No changes. Evidências apply.log, post-apply-plan.txt e deployed-*.json no mesmo diretório. Não reaplicar o binário consumido. [Plano textual](../artifacts/bootstrap-gateway-egress/tfplan.txt) e [revisão](../artifacts/bootstrap-gateway-egress/REVISAO.md).
+
+Após aplicar o bootstrap, executar novo base-provision com plano salvo revisado/aprovado para concluir a implantação parcial e aplicar os manifestos Kubernetes. Não reutilizar o plano anterior nem executar destroy para essa correção.
+
+## Tags na criação do Gateway — plano de 12/10/2026
+
+gateway-provision falhou em CreateVpcLink por falta de autorização de tags no caminho /vpclinks. O bootstrap acrescenta apigateway:PATCH somente nas coleções /vpclinks e /restapis, condicionado às tags da requisição Project=mecanica, Environment correspondente, Component=gateway e ManagedBy=Terraform. Mantém todas as permissões existentes, o isolamento hom/prd e as restrições aos recursos já criados.
+
+Plano artifacts/bootstrap-gateway-tags/bootstrap-gateway-tags.tfplan: zero criações, duas alterações (policies gerenciadas Gateway hom/prd), zero exclusões/substituições. SHA-256 A8720C2E52C4C9028EB3092E22CC0F1B6EDEB55106AAD0D8EFE7522E718CDF27. Terraform validado, duas policies Access Analyzer sem findings e doze decisões IAM VPC Link conferidas. A simulação PATCH /restapis é inconclusiva: negou inclusive o controle hipotético Action=*/Resource=*; validação REST real fica para o workflow. [Plano textual](../artifacts/bootstrap-gateway-tags/tfplan.txt) e [revisão](../artifacts/bootstrap-gateway-tags/REVISAO.md).
+
+Plano acima aprovado e aplicado: zero criações, duas alterações e zero exclusões. Policies v2/associações hom/prd conferidas; simulação nas roles reais autorizou tags na criação do VPC Link. Plano posterior retornou No changes. Evidências apply.log, post-apply-plan.txt e deployed-*.json no mesmo diretório. Não reaplicar o binário consumido. Executar nova execução gateway-provision com novo plano revisado/aprovado, preservando a implantação parcial; não reutilizar o plano da execução que falhou. Nenhum deploy Gateway ou destroy executado nesta correção.
+
+## Endpoints de tags — revisão adicional de 12/10/2026
+
+A nova execução gateway-provision continuou falhando em CreateVpcLink após a aplicação da policy v2. CloudTrail confirmou role e tags corretas; a permissão PATCH anteriormente simulada não cobriu toda a autorização de tags. A policy atual também nega os endpoints /tags/... das coleções de criação.
+
+O código acrescenta POST/PUT somente nos endpoints de tags de /vpclinks e /restapis, com destinos literal/URL-encoded e condições Project=mecanica, Environment correspondente, Component=gateway e ManagedBy=Terraform. Não abre um wildcard para todos os endpoints de tags nem novos caminhos de IDs existentes. Demais statements preservados.
+
+[Plano textual](../artifacts/bootstrap-gateway-tag-endpoints/tfplan.txt) e [revisão](../artifacts/bootstrap-gateway-tag-endpoints/REVISAO.md): zero criações, duas alterações das policies Gateway hom/prd, zero exclusões. Binário bootstrap-gateway-tag-endpoints.tfplan; SHA-256 FD2646E5E1AC2F8035B1BC6A1B66F2A60477315E045B640F760D5F5EFC5958B3. Terraform validado, Access Analyzer sem findings e 56 decisões PUT de simulação conferidas antes/depois e negativas de escopo. Não comprova o contexto interno inteiro de CreateVpcLink nem seu sucesso real. Plano salvo aprovado e aplicado: zero criações, duas alterações e zero exclusões. Policies v3/associações hom/prd conferidas; simulação PUT nas roles reais autorizou os quatro endpoints de tags previstos. Plano posterior retornou No changes. Evidências apply.log, post-apply-plan.txt e deployed-*.json no mesmo diretório. Não reaplicar o binário consumido. Próximo: nova execução gateway-provision com novo plano revisado/aprovado; sucesso real de CreateVpcLink/API REST ainda pendente. Nenhum deploy Gateway ou destroy executado nesta correção.
+
+## Revisão integral da policy Gateway — 12/10/2026
+
+A execução após v3 continuou falhando em CreateVpcLink. Esta revisão substitui os blocos especulativos PATCH/POST/PUT nas coleções de tags por criação/gerenciamento com apigateway:* limitado às coleções REST/VPC Link e aos recursos do projeto/ambiente com quatro tags. O registro AWS do VPC Link V2 declara TagResource; a autorização exata passa de implicitDeny na policy v3 para allowed na proposta. Endpoints de tags são tratados separadamente: não possuem ResourceTag, e o serviço também precisa autorizar o recurso original. A checagem conjunta será validada na AWS após apply/deploy; simulação isolada de endpoint não comprova isolamento da chamada inteira.
+
+A ampliação de ações API Gateway é intencional e foi aprovada no plano; não concede AdministratorAccess, gestão de IAM, leitura de Secrets ou alterações de rede. Leitura SSM Gateway é reduzida aos vinte nomes utilizados (base oito, auth cinco, próprios sete), sem GetParametersByPath. Backend/locking, contratos somente leitura, permissão Lambda restrita e logs próprios foram revisados.
+
+[Plano textual](../artifacts/bootstrap-gateway-policy-review/tfplan.txt) e [revisão completa](../artifacts/bootstrap-gateway-policy-review/REVISAO.md): zero criações, quatro alterações IAM (gerenciadas Gateway e inline bootstrap-access hom/prd), zero exclusões/substituições. SHA-256 do binário bootstrap-gateway-policy-review.tfplan: 4C353A917F50F525E1F1D51D3670296E0AE1D9F48EBB925C3861A624B5BB1E50. Terraform fmt/validate e quatro policies Access Analyzer sem findings. Das 108 decisões gerais simuladas, cem correspondem ao esperado e oito REST são inconclusivas, também negadas pelo controle hipotético irrestrito. Nenhum deploy ou destroy executado. Plano salvo aprovado e aplicado: zero criações, quatro alterações IAM e zero exclusões. Policies gerenciadas v4 e inline bootstrap-access hom/prd conferidas contra os documentos aprovados, com associações corretas. Simulação da ação exata apigateway:TagResource em /vpclinks nas duas roles reais retornou allowed com as quatro tags esperadas. Plano posterior retornou No changes. Evidências apply.log, post-apply-plan.txt, post-apply-verification.json, deployed-*.json e live-*-tagresource-result.json no mesmo diretório. Não reaplicar o binário consumido. Iniciar nova execução gateway-provision com novo plano revisado/aprovado, preservando a implantação parcial; não reutilizar o plano da execução que falhou. CreateVpcLink/API REST ainda exigem validação pela execução real. Nenhum deploy Gateway ou destroy executado nesta revisão.
+
+## Recuperação após exclusão parcial e conflito de rotas — 12/10/2026
+
+CloudTrail confirmou CreateVpcLink e CreateRestApi com sucesso. PutRestApi falhou porque /Catalog/{id} e /Catalog/{serviceId} eram recursos irmãos variáveis, proibidos pelo API Gateway REST. O destroy seguinte excluiu a API 9kp9vwexok, mas GetRestApi passou a retornar AccessDenied: a API excluída não oferece ResourceTag e a condição bloqueava a resposta NotFound. O estado ainda apontava para esse ID.
+
+A policy do bootstrap acrescenta somente GET em /restapis/* de us-east-1 sem condição de tags. Essa leitura de metadados também pode alcançar APIs do outro ambiente na mesma conta; é uma exceção deliberada para reconciliar exclusões e implantação parcial. Escrita/exclusão continuam condicionadas às tags do ambiente. Nenhuma permissão de Secrets, IAM ou alterações de rede foi acrescentada.
+
+A definição Terraform normaliza segmentos variáveis por posição, como /Catalog/{path2}, reunindo os métodos no mesmo recurso. Cada integração conserva a URI do backend e mapeia path2 para id ou serviceId conforme o método. Os nomes internos não mudam a URL concreta nem o contrato publicado da API. Uma precondition rejeita conflitos de método após a normalização. Campos internos de mapeamento não são publicados como parâmetros OpenAPI.
+
+Recuperação autorizada pelo mantenedor e aplicada localmente com o perfil administrativo: duas policies Gateway atualizadas; VPC Link 5n94t4 preservado. A primeira tentativa local foi rejeitada por um campo interno no OpenAPI; a saída foi corrigida e somente sua API vazia e tainted e27sf379ff foi substituída. O Gateway final suee4aiawf, deployment qm9w49, stage hom e configuração SSM foram implantados. Base, banco, API e Lambda foram preservados.
+
+Validação: Terraform fmt/validate aprovados, Access Analyzer sem findings, planos posteriores do bootstrap e Gateway No changes. HTTPS POST /customers/validate com documento inválido retornou 400; GET /Catalog sem token retornou 401, comprovando as duas integrações. Todas as rotas implantadas e os mapeamentos de Catalog foram conferidos. O plano destroy foi gerado com sucesso, mas não foi aplicado; a execução com OIDC pelo workflow ainda deve ser conferida pelo mantenedor.
+
+Evidências em artifacts/gateway-recovery. Publicar as alterações Terraform antes do próximo gateway-provision; o código anterior ainda possui o conflito de rotas. Iniciar nova execução e revisar seu plano, sem reutilizar planos anteriores à recuperação. A validação de autenticação completa/JWT permanece na etapa funcional correspondente.
+
+## Metadados SSM do Gateway — 12/10/2026
+
+O gateway-destroy falhou no plan ao atualizar os sete recursos aws_ssm_parameter.configuration: faltava ssm:DescribeParameters. O provider AWS 6.58.0 usa GetParameter, DescribeParameters e ListTagsForResource na leitura do recurso; a conferência administrativa local anterior não demonstrava as permissões OIDC do workflow.
+
+A policy Gateway hom/prd agora possui ReadRegionalParameterMetadata: somente ssm:DescribeParameters com Resource="*" e aws:RequestedRegion=us-east-1. A ação não oferece escopo por ARN e retorna metadados, sem valores. Ela pode descrever metadados de parâmetros de outros componentes/ambientes da conta; GetParameter/GetParameters, escrita e exclusão preservam os nomes/prefixos já autorizados.
+
+Plano salvo aplicado dentro da autorização de recuperação do mantenedor: zero criações, duas alterações das policies Gateway e zero exclusões. Policies v6 conferidas; simulate-principal-policy das roles hom/prd retornou allowed para DescribeParameters em us-east-1. Simulações da proposta negaram us-west-2, Access Analyzer não retornou findings e o plano posterior do bootstrap mostrou No changes. Nenhum destroy Gateway foi executado nesta correção.
+
+Evidências em artifacts/bootstrap-gateway-ssm-metadata. Iniciar uma nova execução gateway-destroy para gerar/revisar o plano e validar o fluxo com OIDC. A correção IAM já está aplicada na AWS; versionar gateway-permissions.tf e estes registros para preservar a declaração do bootstrap. Não é necessário alterar o workflow.
+
+Referências: [ações SSM](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ssm.html) e [provider 6.58.0](https://github.com/hashicorp/terraform-provider-aws/blob/v6.58.0/internal/service/ssm/parameter.go).
+
+## Leitura do VPC Link durante o descarte — 12/10/2026
+
+O destroy pelo workflow removeu SSM, stage, deployment, logs, permissão Lambda e API REST. DeleteVpcLink também foi aceito, mas a espera final GetVpcLink recebeu AccessDenied porque a leitura ainda dependia de ResourceTag. A consulta administrativa posterior retornou NotFound; o recurso já havia desaparecido e somente sua referência permanecia no estado Terraform.
+
+A policy Gateway hom/prd acrescenta ReadRegionalVpcLinkMetadata, permitindo somente apigateway:GET em arn:aws:apigateway:us-east-1::/vpclinks/* sem exigir tags. Assim o provider consegue aguardar exclusão e receber NotFound. A leitura pode inspecionar metadados de VPC Links do outro ambiente na mesma região; escrita e exclusão mantêm as condições existentes. A exceção corresponde à leitura já adotada para APIs REST e não exige alterar workflows.
+
+Plano salvo do bootstrap aplicado dentro da autorização de recuperação AWS: zero criações, duas alterações IAM e zero exclusões. Demais statements preservados. Terraform fmt/validate e Access Analyzer aprovados; simulações hom/prd autorizaram GET sem tags em us-east-1 e negaram us-west-2. A simulação das roles reais após o apply retornou allowed; o plano posterior do bootstrap mostrou No changes.
+
+A reconciliação foi feita por plan -destroy salvo e apply do mesmo plano, sem state rm, edição manual ou alterações reais: 0 added, 0 changed, 0 destroyed. Estado final sem recursos managed; EC2 sem interfaces de rede associadas ao SG sg-0a0169a0068e6f502. O descarte do Gateway hom está concluído. O workflow ainda pode ser executado novamente para registrar sucesso no GitHub, usando novo plano; não reutilizar o plano que falhou.
+
+Evidências em artifacts/bootstrap-gateway-vpc-link-read. Versionar a correção no bootstrap e estes registros. [Provider AWS 6.58.0: leitura e espera de exclusão](https://github.com/hashicorp/terraform-provider-aws/blob/v6.58.0/internal/service/apigatewayv2/vpc_link.go).
+
+## X-Ray e layer Collector — preparação local de 15/10/2026
+
+O bootstrap prepara duas alterações por ambiente, sem aplicação AWS nesta entrega:
+
+- A policy inline da role persistente `mecanica-<ambiente>-auth-runtime` permite somente `xray:PutTraceSegments` e `xray:PutTelemetryRecords`, com Resource `*` exigido pelas ações e condição `aws:RequestedRegion=us-east-1`. Não concede leitura de traces ou administração X-Ray.
+- A policy gerenciada auth-provision da pipeline permite `lambda:GetLayerVersion` exclusivamente em `arn:aws:lambda:us-east-1:184161586896:layer:opentelemetry-collector-amd64-0_22_0:1`. A role CI não recebe essa permissão. Leitura de Secrets e confiança das roles permanecem iguais.
+
+O SAM referencia a role runtime existente, sem administrá-la. A service-linked role regional do API Gateway já declarada e sua policy AWS são preservadas; não há novos statements nas pipelines Gateway. X-Ray nativo e OpenTelemetry são controles independentes, ambos desabilitados por padrão.
+
+Conferência local: Terraform fmt/init com backend desabilitado/validate, avaliação dos JSONs das policies e limites IAM. Isso não comprova autorização real, existência da layer ou ingestão. Antes da ativação, gerar novo plano AWS salvo do bootstrap, revisar e aplicar somente após aprovação; nenhum plano anterior cobre estas permissões.
+
+Após o bootstrap aprovado/aplicado: publicar revisão nova auth → provisionar com telemetria/New Relic permanentes e xray_enabled explícito → revisar/aprovar/aplicar Gateway com xray_tracing_enabled desejado → conferir segmentos com chamadas controladas e dados fictícios. Segmentos nativos AWS não passam pela sanitização da aplicação. Correlação W3C/X-Ray, CloudWatch/New Relic, amostragem e ausência de duplicação permanecem para validação posterior. Não executar destroy para testar.
+
+## Plano bootstrap E5 X-Ray/layer — 15/10/2026
+
+[Plano textual](../artifacts/bootstrap-e5-xray/tfplan.txt) e [revisão](../artifacts/bootstrap-e5-xray/REVISAO.md): zero criações, quatro alterações IAM (auth-provision e auth-runtime hom/prd), zero exclusões/substituições. Somente GetLayerVersion na versão exata do Collector pelas pipelines auth e PutTraceSegments/PutTelemetryRecords no runtime em us-east-1. Demais statements/atributos/outputs preservados; allow_legacy_cleanup=false. Quatro policies Access Analyzer sem findings. Binário bootstrap-e5-xray.tfplan; SHA-256 714579D0B104B53EBAF848B1D68E432104E3DCB54BD792C1003BE1BDCAB24F57. Plano completo gerado com sessão administrativa; aguardando aprovação, nenhum apply ou ativação. O arquivo INCOMPLETO-mecanica.tfplan é evidência inválida para aplicação. Publicação/provisionamento auth e configuração Gateway continuam posteriores à aprovação/aplicação.
+
+**Aplicação aprovada concluída:** aplicado exatamente bootstrap-e5-xray.tfplan, SHA-256 714579D0B104B53EBAF848B1D68E432104E3DCB54BD792C1003BE1BDCAB24F57. Resultado: zero criações, quatro alterações e zero exclusões. Quatro policies implantadas idênticas às aprovadas; associações auth hom/prd conferidas. Conferência Terraform posterior retornou No changes. Evidências apply.log, post-apply-verification.json, deployed-*.json e post-apply-plan.txt em artifacts/bootstrap-e5-xray. Binário consumido: não reaplicar. Nenhuma ativação, deploy Gateway/Lambda ou destroy executado; publicação/provisionamento e conferência de segmentos nativos continuam posteriores.
+
+## License Key New Relic persistente
+
+newrelic.tf cria somente metadados /mecanica/<ambiente>/observability/newrelic-license-key, com recuperação sete dias/prevent_destroy. Nenhuma versão ou chave passa pelo Terraform. Depois de aplicar um novo plano salvo aprovado, cadastrar o valor como texto simples no console AWS, inicialmente hom. Outputs mostram somente ARNs.
+
+Bootstrap amplia auth-runtime para ler somente o Secret do ambiente; pipelines base/auth recebem somente DescribeSecret/ListSecretVersionIds. A base recebe permissão de administrar sua collector-runtime/Pod Identity; a role e associação são recursos da base, não deste bootstrap. O provider nativo omite VersionStage, utilizando AWSCURRENT por padrão; a nova permissão de leitura não exige o campo explícito. Os acessos anteriores não são removidos. [Cadastro e isolamento](../docs/NEW_RELIC.md).
+
+Não executar destroy do bootstrap como teste: os Secrets e demais recursos persistentes possuem proteção contra exclusão. Esta entrega não gerou nem aplicou plano AWS; precisa de nova aprovação posterior.
+
+## Leitura X-Ray pelo New Relic — preparação local
+
+`newrelic-xray.tf` acrescenta somente `mecanica-newrelic-xray` (path `/mecanica/observability/`) e sua policy inline `read-regional-xray`. Role persistente do bootstrap, compartilhada pela conta/região; descartes dos ambientes não a removem. Principal AWS exclusivo da conta New Relic US `754728514883`, `sts:AssumeRole` condicionado a `sts:ExternalId=var.new_relic_account_id`. Leitura limitada a `xray:Get*`/`xray:BatchGet*`, Resource `*` exigido pelas consultas e condição regional us-east-1. Sem ReadOnlyAccess, Budgets, CloudWatch, Secrets ou escrita.
+
+Antes de qualquer novo plan do bootstrap, preencher a variável obrigatória `new_relic_account_id` no tfvars local: Account ID real do New Relic US, numérico positivo, sem default e sem relação com a License Key. O exemplo apresenta somente formato fictício comentado; nenhum valor real foi inferido ou cadastrado. Backend, provider/lockfile e demais recursos preservados. Revisar/aprovar novo plano salvo; mudança isolada deve criar apenas role e policy inline, sem alterações/exclusões existentes. Nenhum plano AWS ou apply nesta implementação.
+
+Após o apply aprovado, `terraform output -raw newrelic_xray_role_arn` fornece o ARN para conexão manual `mecanica-xray` em Infrastructure → AWS. Habilitar somente X-Ray/us-east-1/polling cinco minutos. Não criar role pelo console ou ampliar permissões para seguir o tutorial genérico. Leitura alcança traces de hom/prd nessa região; não há isolamento por tags/função. [Procedimento, NRQL, sequência e limites](../docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa). Ingestão real/correlação W3C continuam pendentes; não mudar C#, SAM, Collectors ou workflows.
+
+Validação local concluída: Terraform 1.15.9/AWS 6.58.0, fmt -check, init -backend=false com provider em cache e validate aprovados. JSON gerado pelo terraform console revisado com Account ID fictício 1234567: trust 220 e policy 208 caracteres. Inputs vazio, zero, negativo e não numérico produziram o diagnóstico esperado de validação; valor positivo aceito. Console pode retornar código zero mesmo emitindo esse diagnóstico, por isso a conferência considerou a mensagem nativa. Evidências locais em artifacts/e5-xray-newrelic/validation.json e policies-fictitious-account.json; nenhum teste operacional/script novo, chamada AWS, plano ou apply.
+
+## Permissões dos bloqueios de destroy — 17/10/2026
+
+destroy-permissions.tf declara uma policy gerenciada de inspeção por componente (API, auth, database, base) e ambiente, limitada à dependência direta. API/auth recebem GET nas coleções regionais /restapis e /vpclinks. Somente database recebe lambda:ListFunctions e eks:ListClusters. Somente base recebe DescribeDBInstances/DescribeDBSubnetGroups. As consultas EC2 necessárias já eram permitidas. Sem leitura de Secrets, escrita de consumidores ou acesso a estados de outros repositórios.
+
+Listagens que não suportam ARN por ambiente usam Resource * com aws:RequestedRegion=us-east-1; nomes do ambiente são filtrados no workflow. Isso permite inspeção de metadados regionais e não representa isolamento IAM de leitura entre hom/prd. Escritas existentes permanecem inalteradas.
+
+Duas policies administrativas separadas base-database-view permitem à pipeline base associar/desassociar exclusivamente AmazonEKSViewPolicy na access entry database do próprio cluster. Associação exige namespace default, escopo namespace e lista de namespaces presente. A base declara a associação; database preserva Edit em database-init e recebe View em default, sem edição ou leitura de Secrets nesse namespace. As policies gerenciadas evitam ampliar as policies inline existentes.
+
+Revisar limites das policies e número de associações por role. Nenhum plano AWS ou apply executado nesta entrega. Ordem de publicação: bootstrap por plano salvo aprovado, depois base com a associação, depois uso dos workflows atualizados. Testes operacionais de bloqueio ficam para utilização autorizada, sem destruições para validar a implementação.

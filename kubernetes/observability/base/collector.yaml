@@ -1,0 +1,295 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+  kubeletstats:
+    collection_interval: 30s
+    auth_type: serviceAccount
+    endpoint: https://${env:K8S_NODE_NAME}:10250
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    insecure_skip_verify: false
+    metric_groups: [node, pod, container]
+    resource_attributes:
+      container.id:
+        enabled: false
+    metrics:
+      k8s.node.uptime:
+        enabled: true
+      k8s.node.network.errors:
+        enabled: false
+      k8s.node.network.io:
+        enabled: false
+      k8s.pod.network.errors:
+        enabled: false
+      k8s.pod.network.io:
+        enabled: false
+  k8s_cluster:
+    auth_type: serviceAccount
+    collection_interval: 30s
+    metadata_collection_interval: 0s
+    distribution: kubernetes
+    node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+    allocatable_types_to_report: [cpu, memory]
+  # Named groups are supplied by collector-cloudwatch.yaml in each overlay.
+  aws_cloudwatch/gateway:
+    region: ${env:AWS_REGION}
+    logs:
+      poll_interval: 60s
+      initial_lookback: 5m
+      max_events_per_request: 1000
+      groups:
+        named: {}
+  aws_cloudwatch/metrics:
+    region: ${env:AWS_REGION}
+    logs:
+      groups:
+        named: {}
+    metrics:
+      collection_interval: 60s
+      period: 60s
+      delay: 10m
+      queries:
+        - namespace: AWS/ApiGateway
+          metric_name: Count
+          stats: [SampleCount]
+          dimensions:
+            ApiName: ${env:GATEWAY_NAME}
+            Stage: ${env:DEPLOYMENT_ENVIRONMENT}
+        - namespace: AWS/ApiGateway
+          metric_name: 4XXError
+          stats: [Sum]
+          dimensions:
+            ApiName: ${env:GATEWAY_NAME}
+            Stage: ${env:DEPLOYMENT_ENVIRONMENT}
+        - namespace: AWS/ApiGateway
+          metric_name: 5XXError
+          stats: [Sum]
+          dimensions:
+            ApiName: ${env:GATEWAY_NAME}
+            Stage: ${env:DEPLOYMENT_ENVIRONMENT}
+        - namespace: AWS/ApiGateway
+          metric_name: Latency
+          stats: [Average]
+          dimensions:
+            ApiName: ${env:GATEWAY_NAME}
+            Stage: ${env:DEPLOYMENT_ENVIRONMENT}
+        - namespace: AWS/ApiGateway
+          metric_name: IntegrationLatency
+          stats: [Average]
+          dimensions:
+            ApiName: ${env:GATEWAY_NAME}
+            Stage: ${env:DEPLOYMENT_ENVIRONMENT}
+        - namespace: AWS/Lambda
+          metric_name: Invocations
+          stats: [Sum]
+          dimensions:
+            FunctionName: ${env:AUTH_FUNCTION_NAME}
+        - namespace: AWS/Lambda
+          metric_name: Errors
+          stats: [Sum]
+          dimensions:
+            FunctionName: ${env:AUTH_FUNCTION_NAME}
+        - namespace: AWS/Lambda
+          metric_name: Throttles
+          stats: [Sum]
+          dimensions:
+            FunctionName: ${env:AUTH_FUNCTION_NAME}
+        - namespace: AWS/Lambda
+          metric_name: Duration
+          stats: [Average]
+          dimensions:
+            FunctionName: ${env:AUTH_FUNCTION_NAME}
+        - namespace: AWS/Lambda
+          metric_name: ConcurrentExecutions
+          stats: [Maximum]
+          dimensions:
+            FunctionName: ${env:AUTH_FUNCTION_NAME}
+        - namespace: AWS/RDS
+          metric_name: CPUUtilization
+          stats: [Average]
+          dimensions:
+            DBInstanceIdentifier: ${env:DATABASE_INSTANCE_IDENTIFIER}
+        - namespace: AWS/RDS
+          metric_name: FreeableMemory
+          stats: [Average]
+          dimensions:
+            DBInstanceIdentifier: ${env:DATABASE_INSTANCE_IDENTIFIER}
+        - namespace: AWS/RDS
+          metric_name: DatabaseConnections
+          stats: [Average]
+          dimensions:
+            DBInstanceIdentifier: ${env:DATABASE_INSTANCE_IDENTIFIER}
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  filter/kubernetes:
+    metrics:
+      include:
+        match_type: strict
+        metric_names:
+          - k8s.node.cpu.usage
+          - k8s.pod.cpu.usage
+          - container.cpu.usage
+          - k8s.node.memory.working_set
+          - k8s.pod.memory.working_set
+          - container.memory.working_set
+          - k8s.node.memory.available
+          - k8s.node.uptime
+          - k8s.node.condition_ready
+          - k8s.node.condition_memory_pressure
+          - k8s.node.condition_disk_pressure
+          - k8s.node.condition_pid_pressure
+          - k8s.node.allocatable_cpu
+          - k8s.node.allocatable_memory
+          - k8s.pod.phase
+          - k8s.container.ready
+          - k8s.container.restarts
+          - k8s.deployment.desired
+          - k8s.deployment.available
+          - k8s.container.cpu_request
+          - k8s.container.cpu_limit
+          - k8s.container.memory_request
+          - k8s.container.memory_limit
+  k8sattributes:
+    auth_type: serviceAccount
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.pod.uid
+        - k8s.node.name
+        - k8s.deployment.name
+    pod_association:
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+      - sources:
+          - from: connection
+  transform/kubernetes:
+    metric_statements:
+      - context: resource
+        statements:
+          - keep_keys(attributes, ["k8s.namespace.name", "k8s.pod.name", "k8s.pod.uid", "k8s.node.name", "k8s.deployment.name", "k8s.container.name"])
+  resource/cluster:
+    attributes:
+      - key: k8s.cluster.name
+        value: ${env:K8S_CLUSTER_NAME}
+        action: insert
+      - key: deployment.environment.name
+        value: ${env:DEPLOYMENT_ENVIRONMENT}
+        action: insert
+  # Parse errors are silent: never include the original access record in diagnostics.
+  transform/gateway:
+    error_mode: silent
+    log_statements:
+      - context: log
+        statements:
+          - keep_keys(attributes, ["id"])
+          - set(cache["event"], ParseJSON(body)) where IsString(body)
+          - set(attributes["gateway.valid_json"], true) where IsMap(cache["event"])
+          - set(attributes["requestId"], cache["event"]["requestId"]) where IsString(cache["event"]["requestId"]) and cache["event"]["requestId"] != "-"
+          - set(attributes["extendedRequestId"], cache["event"]["extendedRequestId"]) where IsString(cache["event"]["extendedRequestId"]) and cache["event"]["extendedRequestId"] != "-"
+          - set(attributes["xrayTraceId"], cache["event"]["xrayTraceId"]) where IsString(cache["event"]["xrayTraceId"]) and cache["event"]["xrayTraceId"] != "-"
+          - set(attributes["method"], cache["event"]["method"]) where IsString(cache["event"]["method"]) and cache["event"]["method"] != "-"
+          - set(attributes["route"], cache["event"]["route"]) where IsString(cache["event"]["route"]) and cache["event"]["route"] != "-"
+          - set(attributes["status"], Int(cache["event"]["status"])) where cache["event"]["status"] != nil
+          - set(attributes["durationMs"], Double(cache["event"]["durationMs"])) where cache["event"]["durationMs"] != nil
+          - set(attributes["integrationMs"], Double(cache["event"]["integrationMs"])) where cache["event"]["integrationMs"] != nil
+          - set(attributes["responseLength"], Int(cache["event"]["responseLength"])) where cache["event"]["responseLength"] != nil
+          - set(body, "Requisição processada pelo Gateway.")
+  filter/gateway:
+    error_mode: silent
+    log_conditions:
+      - 'log.attributes["gateway.valid_json"] != true'
+  attributes/gateway:
+    actions:
+      - key: gateway.valid_json
+        action: delete
+  resource/cloudwatch:
+    attributes:
+      - key: cloud.provider
+        value: aws
+        action: upsert
+      - key: cloud.account.id
+        value: "121754142617"
+        action: upsert
+      - key: cloud.region
+        value: ${env:AWS_REGION}
+        action: upsert
+      - key: deployment.environment.name
+        value: ${env:DEPLOYMENT_ENVIRONMENT}
+        action: upsert
+  resource/gateway:
+    attributes:
+      - key: service.name
+        value: mecanica-gateway
+        action: upsert
+  transform/cloudwatch:
+    error_mode: silent
+    metric_statements:
+      - context: metric
+        statements:
+          - set(unit, "1")
+          - set(unit, "ms") where name == "amazonaws.com/AWS/ApiGateway/Latency" or name == "amazonaws.com/AWS/ApiGateway/IntegrationLatency" or name == "amazonaws.com/AWS/Lambda/Duration"
+          - set(unit, "%") where name == "amazonaws.com/AWS/RDS/CPUUtilization"
+          - set(unit, "By") where name == "amazonaws.com/AWS/RDS/FreeableMemory"
+      - context: datapoint
+        statements:
+          - set(attributes["ApiName"], attributes["Dimensions"]["ApiName"]) where attributes["Dimensions"]["ApiName"] != nil
+          - set(attributes["Stage"], attributes["Dimensions"]["Stage"]) where attributes["Dimensions"]["Stage"] != nil
+          - set(attributes["FunctionName"], attributes["Dimensions"]["FunctionName"]) where attributes["Dimensions"]["FunctionName"] != nil
+          - set(attributes["DBInstanceIdentifier"], attributes["Dimensions"]["DBInstanceIdentifier"]) where attributes["Dimensions"]["DBInstanceIdentifier"] != nil
+          - keep_keys(attributes, ["Namespace", "MetricName", "stat", "ApiName", "Stage", "FunctionName", "DBInstanceIdentifier"])
+  batch:
+    timeout: 1s
+    send_batch_size: 512
+    send_batch_max_size: 512
+exporters:
+  otlphttp/newrelic:
+    endpoint: https://otlp.nr-data.net
+    headers:
+      api-key: ${secretsmanager:${env:NEW_RELIC_LICENSE_KEY_SECRET}}
+    compression: gzip
+    timeout: 3s
+    sending_queue:
+      enabled: true
+      queue_size: 100
+      num_consumers: 2
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 15s
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, resource/cluster, batch]
+      exporters: [otlphttp/newrelic]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, resource/cluster, batch]
+      exporters: [otlphttp/newrelic]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, resource/cluster, batch]
+      exporters: [otlphttp/newrelic]
+    metrics/kubernetes:
+      receivers: [kubeletstats, k8s_cluster]
+      processors: [memory_limiter, filter/kubernetes, k8sattributes, transform/kubernetes, resource/cluster, batch]
+      exporters: [otlphttp/newrelic]
+    logs/cloudwatch:
+      receivers: [aws_cloudwatch/gateway]
+      processors: [memory_limiter, transform/gateway, filter/gateway, attributes/gateway, resource/cloudwatch, resource/gateway, batch]
+      exporters: [otlphttp/newrelic]
+    metrics/cloudwatch:
+      receivers: [aws_cloudwatch/metrics]
+      processors: [memory_limiter, transform/cloudwatch, resource/cloudwatch, batch]
+      exporters: [otlphttp/newrelic]

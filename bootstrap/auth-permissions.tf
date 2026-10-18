@@ -4,6 +4,12 @@ locals {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid      = "InspectNewRelicCredential"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+        Resource = aws_secretsmanager_secret.newrelic[environment].arn
+      },
+      {
         Sid    = "ManageFunction"
         Effect = "Allow"
         Action = [
@@ -19,6 +25,12 @@ locals {
           "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${var.project_name}-${environment}-auth",
           "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${var.project_name}-${environment}-auth:*"
         ]
+      },
+      {
+        Sid      = "ReadCollectorLayer"
+        Effect   = "Allow"
+        Action   = ["lambda:GetLayerVersion"]
+        Resource = "arn:aws:lambda:us-east-1:184161586896:layer:opentelemetry-collector-amd64-0_22_0:1"
       },
       {
         Sid      = "ReadRuntimeRole"

@@ -56,6 +56,15 @@ jobs:
           role-to-assume: ${{ vars.AWS_BASE_ROLE_ARN }}
           allowed-account-ids: '121754142617'
           role-session-name: base-plan-${{ github.run_id }}
+      - name: Check New Relic credential metadata
+        run: |
+          secret="/mecanica/$TARGET_ENVIRONMENT/observability/newrelic-license-key"
+          aws secretsmanager describe-secret --secret-id "$secret" \
+            --query '{ARN:ARN,DeletedDate:DeletedDate}' --output json > "$RUNNER_TEMP/newrelic-secret.json"
+          jq -e '.DeletedDate == null' "$RUNNER_TEMP/newrelic-secret.json" > /dev/null
+          current="$(aws secretsmanager list-secret-version-ids --secret-id "$secret" \
+            --query "length(Versions[?contains(VersionStages, 'AWSCURRENT')])" --output text)"
+          test "$current" = 1 || { echo '::error::Cadastre a License Key no Secret do ambiente antes de provisionar.'; exit 1; }
       - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
       - run: terraform validate -no-color
       - run: terraform plan -var-file="environments/$TARGET_ENVIRONMENT.tfvars" -out=tfplan -no-color -lock-timeout=60s
@@ -111,12 +120,37 @@ jobs:
           path: terraform
           merge-multiple: true
       - run: terraform -chdir=terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
+      - name: Check New Relic credential metadata
+        run: |
+          secret="/mecanica/$TARGET_ENVIRONMENT/observability/newrelic-license-key"
+          aws secretsmanager describe-secret --secret-id "$secret" \
+            --query '{ARN:ARN,DeletedDate:DeletedDate}' --output json > "$RUNNER_TEMP/newrelic-secret.json"
+          jq -e '.DeletedDate == null' "$RUNNER_TEMP/newrelic-secret.json" > /dev/null
+          current="$(aws secretsmanager list-secret-version-ids --secret-id "$secret" \
+            --query "length(Versions[?contains(VersionStages, 'AWSCURRENT')])" --output text)"
+          test "$current" = 1 || { echo '::error::Cadastre a License Key no Secret do ambiente antes de provisionar.'; exit 1; }
       - name: Apply approved plan
         run: terraform -chdir=terraform apply -no-color -lock-timeout=60s tfplan
       - uses: azure/setup-kubectl@v4
         with:
           version: v1.36.0
+      - name: Configure Kubernetes access
+        id: kubeconfig
+        run: aws eks update-kubeconfig --region us-east-1 --name "mecanica-$TARGET_ENVIRONMENT-eks"
       - name: Apply base Kubernetes manifests
+        run: kubectl apply -k kubernetes
+      - name: Apply and restart API Collector
         run: |
-          aws eks update-kubeconfig --region us-east-1 --name "mecanica-$TARGET_ENVIRONMENT-eks"
-          kubectl apply -k kubernetes
+          kubectl apply -k "kubernetes/observability/$TARGET_ENVIRONMENT"
+          kubectl rollout restart deployment/otel-collector --namespace observability
+          kubectl rollout status deployment/otel-collector --namespace observability --timeout=300s
+          printf 'Collector disponivel em %s/observability, configurado para New Relic. Ingestao externa pendente de conferencia.\n' \
+            "$TARGET_ENVIRONMENT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Diagnose Collector failure
+        if: ${{ failure() && steps.kubeconfig.outcome == 'success' }}
+        run: |
+          kubectl get deployment/otel-collector --namespace observability -o wide || true
+          kubectl get pods --namespace observability -l app.kubernetes.io/name=otel-collector -o wide || true
+          kubectl get events --namespace observability --sort-by=.metadata.creationTimestamp | tail -n 40 || true
+          kubectl logs deployment/otel-collector --namespace observability --tail=100 || true
+          exit 1

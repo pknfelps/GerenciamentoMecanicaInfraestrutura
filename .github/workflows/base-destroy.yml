@@ -45,7 +45,10 @@ jobs:
           persist-credentials: false
       - name: Check branch and environment
         run: |
-          test "$GITHUB_REF" = "refs/heads/$( [ "$TARGET_ENVIRONMENT" = hom ] && echo develop || echo main )"
+          case "$TARGET_ENVIRONMENT:$GITHUB_REF" in
+            hom:refs/heads/develop|prd:refs/heads/main) ;;
+            *) echo '::error::Use develop/hom ou main/prd'; exit 1 ;;
+          esac
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.9
@@ -56,6 +59,30 @@ jobs:
           role-to-assume: ${{ vars.AWS_BASE_ROLE_ARN }}
           allowed-account-ids: '121754142617'
           role-session-name: base-plan-${{ github.run_id }}
+      - name: Check database removal
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENVIRONMENT" in hom|prd) ;; *) exit 1 ;; esac
+          test "$AWS_REGION" = us-east-1
+          name="mecanica-$TARGET_ENVIRONMENT-postgres"
+          instances="$(aws rds describe-db-instances --query "DBInstances[?DBInstanceIdentifier=='$name'].[DBInstanceIdentifier,DBInstanceStatus]" --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$instances" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: RDS $name ainda existe ou resposta invalida. Conclua database-destroy, inclusive se o RDS estiver deleting."
+            exit 1
+          fi
+          subnet_group="mecanica-$TARGET_ENVIRONMENT-database"
+          subnet_groups="$(aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='$subnet_group'].DBSubnetGroupName" --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$subnet_groups" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: DB subnet group $subnet_group encontrado ou resposta invalida. Conclua database-destroy."
+            exit 1
+          fi
+          groups="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$name" \
+            --query 'SecurityGroups[].GroupId' --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$groups" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: SG $name encontrado ou resposta invalida. Conclua database-destroy."
+            exit 1
+          fi
+
       - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
       - run: terraform validate -no-color
       - run: terraform plan -destroy -var-file="environments/$TARGET_ENVIRONMENT.tfvars" -out=tfplan -no-color -lock-timeout=60s
@@ -114,8 +141,34 @@ jobs:
       - uses: azure/setup-kubectl@v4
         with:
           version: v1.36.0
+      - name: Check database removal
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENVIRONMENT" in hom|prd) ;; *) exit 1 ;; esac
+          test "$AWS_REGION" = us-east-1
+          name="mecanica-$TARGET_ENVIRONMENT-postgres"
+          instances="$(aws rds describe-db-instances --query "DBInstances[?DBInstanceIdentifier=='$name'].[DBInstanceIdentifier,DBInstanceStatus]" --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$instances" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: RDS $name ainda existe ou resposta invalida. Conclua database-destroy, inclusive se o RDS estiver deleting."
+            exit 1
+          fi
+          subnet_group="mecanica-$TARGET_ENVIRONMENT-database"
+          subnet_groups="$(aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='$subnet_group'].DBSubnetGroupName" --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$subnet_groups" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: DB subnet group $subnet_group encontrado ou resposta invalida. Conclua database-destroy."
+            exit 1
+          fi
+          groups="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$name" \
+            --query 'SecurityGroups[].GroupId' --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$groups" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: SG $name encontrado ou resposta invalida. Conclua database-destroy."
+            exit 1
+          fi
+
       - name: Configure Kubernetes access
         run: aws eks update-kubeconfig --region us-east-1 --name "mecanica-$TARGET_ENVIRONMENT-eks"
+      - name: Remove API Collector
+        run: kubectl delete -k "kubernetes/observability/$TARGET_ENVIRONMENT" --ignore-not-found=true --cascade=foreground --wait=true --timeout=300s
       - name: Remove base Kubernetes manifests
         run: kubectl delete -k kubernetes --ignore-not-found=true --wait=true
       - name: Apply approved plan

@@ -1,0 +1,6 @@
+receivers:
+  aws_cloudwatch/gateway:
+    logs:
+      groups:
+        named:
+          /aws/apigateway/mecanica-prd-gateway: {}

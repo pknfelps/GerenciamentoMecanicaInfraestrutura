@@ -29,10 +29,23 @@ locals {
         Condition = { StringEquals = { "secretsmanager:VersionStage" = "AWSCURRENT" } }
       },
       {
+        Sid      = "ReadNewRelicLicenseKey"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.newrelic[environment].arn
+      },
+      {
         Sid      = "WriteFunctionLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/aws/lambda/${var.project_name}-${environment}-auth:*"
+      },
+      {
+        Sid       = "WriteRegionalXRayTraces"
+        Effect    = "Allow"
+        Action    = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } }
       },
       {
         Sid       = "ManageLambdaInterfaces"

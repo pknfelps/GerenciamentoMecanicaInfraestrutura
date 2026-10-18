@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+configMapGenerator:
+  - name: otel-collector-config
+    behavior: merge
+    files:
+      - collector-cloudwatch.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: otel-collector
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: otel-collector
+      spec:
+        template:
+          spec:
+            containers:
+              - name: otel-collector
+                env:
+                  - name: AWS_REGION
+                    value: us-east-1
+                  - name: NEW_RELIC_LICENSE_KEY_SECRET
+                    value: /mecanica/prd/observability/newrelic-license-key
+                  - name: K8S_CLUSTER_NAME
+                    value: mecanica-prd-eks
+                  - name: DEPLOYMENT_ENVIRONMENT
+                    value: prd
+                  - name: GATEWAY_NAME
+                    value: mecanica-prd-gateway
+                  - name: AUTH_FUNCTION_NAME
+                    value: mecanica-prd-auth
+                  - name: DATABASE_INSTANCE_IDENTIFIER
+                    value: mecanica-prd-postgres

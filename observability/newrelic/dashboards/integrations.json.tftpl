@@ -1,0 +1,549 @@
+{
+  "name": "Mecânica — Integrações e autenticação",
+  "description": "Autenticação, Gateway, Lambda, RDS e notificações pelos sinais existentes. Definição persistente em GerenciamentoMecanicaInfraestrutura/observability/newrelic.",
+  "permissions": "PUBLIC_READ_ONLY",
+  "pages": [
+    {
+      "name": "Integrações e autenticação",
+      "description": "Indicadores e diagnóstico técnico por ambiente no período selecionado.",
+      "widgets": [
+        {
+          "title": "Como interpretar integrações e autenticação",
+          "layout": {
+            "row": 1,
+            "column": 1,
+            "width": 12,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "## Integrações e autenticação\nSelecione **hom** ou **prd** e o período global; sugestão: **60 minutos**. O filtro é de visualização, não de autorização. Última amostra histórica não comprova disponibilidade atual. Sem dados não equivale a zero ou ausência de falhas.\n**Autenticação OTLP:** 400/401 são negativas esperadas; falhas técnicas são timeout/technical-failure. O login interno separa 5xx de 4xx. Durações em **ms**; a medição do handler inclui inicialização tardia quando ocorre e termina antes do flush.\n**CloudWatch:** atraso de coleta de **dez minutos**, mais publicação/exportação. Cada ponto mostra a última estatística de **60 segundos** no bucket; concorrência mostra o maior Maximum. Não são totais do período nem latências ponderadas do intervalo. CPU RDS em **%**, memória livre em **MiB**; contagens não são taxas. O seletor pode incluir dados de recursos já removidos."
+          }
+        },
+        {
+          "title": "Última amostra da autenticação (UTC)",
+          "layout": {
+            "row": 5,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(latest(timestamp), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Última amostra UTC' FROM Metric WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}} AND metricName = 'mecanica.auth.invocations'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Última amostra de notificações (UTC)",
+          "layout": {
+            "row": 5,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(latest(timestamp), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Última amostra UTC' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `notification.type` IN ('budget_available', 'status_changed') AND mode IN ('smtp', 'simulated') AND outcome IN ('success', 'failure') AND metricName = 'mecanica.orders.notifications'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Última amostra CloudWatch por serviço (UTC)",
+          "layout": {
+            "row": 5,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(filter(latest(timestamp), WHERE Namespace = 'AWS/ApiGateway' AND ApiName = concat('mecanica-', {{environment}}, '-gateway') AND Stage = {{environment}} AND metricName = 'amazonaws.com/AWS/ApiGateway/Count' AND stat = 'SampleCount'), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Gateway UTC', toDatetime(filter(latest(timestamp), WHERE Namespace = 'AWS/Lambda' AND FunctionName = concat('mecanica-', {{environment}}, '-auth') AND metricName = 'amazonaws.com/AWS/Lambda/Invocations' AND stat = 'Sum'), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Lambda UTC', toDatetime(filter(latest(timestamp), WHERE Namespace = 'AWS/RDS' AND DBInstanceIdentifier = concat('mecanica-', {{environment}}, '-postgres') AND metricName = 'amazonaws.com/AWS/RDS/CPUUtilization' AND stat = 'Average'), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'RDS UTC' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND metricName IN ('amazonaws.com/AWS/ApiGateway/Count', 'amazonaws.com/AWS/Lambda/Invocations', 'amazonaws.com/AWS/RDS/CPUUtilization')"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Clientes — invocações concluídas",
+          "layout": {
+            "row": 8,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.auth.invocations`) AS 'Invocações' FROM Metric WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Clientes — resultados por categoria",
+          "layout": {
+            "row": 8,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.auth.invocations`) AS 'Invocações' FROM Metric WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}} FACET outcome LIMIT 6"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Clientes — falhas técnicas (%)",
+          "layout": {
+            "row": 8,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT 100 * filter(sum(`mecanica.auth.invocations`), WHERE outcome IN ('timeout', 'technical-failure')) / sum(`mecanica.auth.invocations`) AS 'Falhas técnicas (%)' FROM Metric WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Clientes — duração do handler (ms)",
+          "layout": {
+            "row": 11,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.auth.invocation.duration`) * 1000 AS 'Média (ms)', getField(percentile(`mecanica.auth.invocation.duration`, 50), '50.0') * 1000 * (count(`mecanica.auth.invocation.duration`) / count(`mecanica.auth.invocation.duration`)) AS 'p50 (ms)', getField(percentile(`mecanica.auth.invocation.duration`, 95), '95.0') * 1000 * (count(`mecanica.auth.invocation.duration`) / count(`mecanica.auth.invocation.duration`)) AS 'p95 (ms)' FROM Metric WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}}"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Clientes — evolução da duração (ms)",
+          "layout": {
+            "row": 11,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`mecanica.auth.invocation.duration`) * 1000 AS 'Média (ms)', getField(percentile(`mecanica.auth.invocation.duration`, 95), '95.0') * 1000 * (count(`mecanica.auth.invocation.duration`) / count(`mecanica.auth.invocation.duration`)) AS 'p95 (ms)' FROM Metric WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}} TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Login interno — requisições por código HTTP",
+          "layout": {
+            "row": 14,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT count(`http.server.request.duration`) AS 'Requisições' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `http.request.method` = 'POST' AND `http.route` IN ('Authentication', '/Authentication') FACET `http.response.status_code` LIMIT 20"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Login interno — respostas 5xx (%)",
+          "layout": {
+            "row": 14,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT 100 * filter(count(`http.server.request.duration`), WHERE `http.response.status_code` >= 500 AND `http.response.status_code` < 600) / count(`http.server.request.duration`) AS '5xx (%)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `http.request.method` = 'POST' AND `http.route` IN ('Authentication', '/Authentication')"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Login interno — duração (ms)",
+          "layout": {
+            "row": 14,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT average(`http.server.request.duration`) * 1000 AS 'Média (ms)', getField(percentile(`http.server.request.duration`, 95), '95.0') * 1000 * (count(`http.server.request.duration`) / count(`http.server.request.duration`)) AS 'p95 (ms)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `http.request.method` = 'POST' AND `http.route` IN ('Authentication', '/Authentication')"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Gateway — últimas contagens de 60 s por ponto",
+          "layout": {
+            "row": 17,
+            "column": 1,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT filter(latest(`amazonaws.com/AWS/ApiGateway/Count`), WHERE stat = 'SampleCount') AS 'Requisições (60 s)', filter(latest(`amazonaws.com/AWS/ApiGateway/4XXError`), WHERE stat = 'Sum') AS '4xx (60 s)', filter(latest(`amazonaws.com/AWS/ApiGateway/5XXError`), WHERE stat = 'Sum') AS '5xx (60 s)' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/ApiGateway' AND ApiName = concat('mecanica-', {{environment}}, '-gateway') AND Stage = {{environment}} AND stat IN ('SampleCount', 'Sum') TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Gateway — últimas latências médias de 60 s (ms)",
+          "layout": {
+            "row": 17,
+            "column": 7,
+            "width": 6,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`amazonaws.com/AWS/ApiGateway/Latency`) AS 'Latency (ms)', latest(`amazonaws.com/AWS/ApiGateway/IntegrationLatency`) AS 'IntegrationLatency (ms)' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/ApiGateway' AND ApiName = concat('mecanica-', {{environment}}, '-gateway') AND Stage = {{environment}} AND stat = 'Average' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Lambda AWS — últimas contagens de 60 s por ponto",
+          "layout": {
+            "row": 20,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`amazonaws.com/AWS/Lambda/Invocations`) AS 'Invocations (60 s)', latest(`amazonaws.com/AWS/Lambda/Errors`) AS 'Errors (60 s)', latest(`amazonaws.com/AWS/Lambda/Throttles`) AS 'Throttles (60 s)' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/Lambda' AND FunctionName = concat('mecanica-', {{environment}}, '-auth') AND stat = 'Sum' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Lambda AWS — última Duration média de 60 s (ms)",
+          "layout": {
+            "row": 20,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`amazonaws.com/AWS/Lambda/Duration`) AS 'Duration (ms)' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/Lambda' AND FunctionName = concat('mecanica-', {{environment}}, '-auth') AND stat = 'Average' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Lambda AWS — maior concorrência por ponto",
+          "layout": {
+            "row": 20,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT max(`amazonaws.com/AWS/Lambda/ConcurrentExecutions`) AS 'Concorrência máxima' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/Lambda' AND FunctionName = concat('mecanica-', {{environment}}, '-auth') AND stat = 'Maximum' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "RDS — última CPU média de 60 s (%)",
+          "layout": {
+            "row": 23,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`amazonaws.com/AWS/RDS/CPUUtilization`) AS 'CPU (%)' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/RDS' AND DBInstanceIdentifier = concat('mecanica-', {{environment}}, '-postgres') AND stat = 'Average' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "RDS — última memória livre média de 60 s (MiB)",
+          "layout": {
+            "row": 23,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`amazonaws.com/AWS/RDS/FreeableMemory`) / 1048576 AS 'Memória livre (MiB)' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/RDS' AND DBInstanceIdentifier = concat('mecanica-', {{environment}}, '-postgres') AND stat = 'Average' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "RDS — últimas conexões médias de 60 s",
+          "layout": {
+            "row": 23,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT latest(`amazonaws.com/AWS/RDS/DatabaseConnections`) AS 'Conexões' FROM Metric WHERE `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND Namespace = 'AWS/RDS' AND DBInstanceIdentifier = concat('mecanica-', {{environment}}, '-postgres') AND stat = 'Average' TIMESERIES AUTO"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Notificações — tentativas concluídas por tipo e modo",
+          "layout": {
+            "row": 26,
+            "column": 1,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.orders.notifications`) AS 'Tentativas concluídas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `notification.type` IN ('budget_available', 'status_changed') AND mode IN ('smtp', 'simulated') AND outcome IN ('success', 'failure') FACET `notification.type`, mode LIMIT 4"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Notificações — resultados por tipo e modo",
+          "layout": {
+            "row": 26,
+            "column": 5,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.orders.notifications`) AS 'Tentativas concluídas' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `notification.type` IN ('budget_available', 'status_changed') AND mode IN ('smtp', 'simulated') AND outcome IN ('success', 'failure') FACET `notification.type`, mode, outcome LIMIT 8"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Notificações — falhas por tipo e modo (%)",
+          "layout": {
+            "row": 26,
+            "column": 9,
+            "width": 4,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT 100 * filter(sum(`mecanica.orders.notifications`), WHERE outcome = 'failure') / sum(`mecanica.orders.notifications`) AS 'Falhas (%)' FROM Metric WHERE `service.name` = 'mecanica-api' AND `deployment.environment.name` = {{environment}} AND `notification.type` IN ('budget_available', 'status_changed') AND mode IN ('smtp', 'simulated') AND outcome IN ('success', 'failure') FACET `notification.type`, mode LIMIT 4"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Diagnóstico — falhas da autenticação (até 100 logs)",
+          "layout": {
+            "row": 29,
+            "column": 1,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT timestamp, category, status, durationMs, lambdaRequestId, gatewayRequestId, `trace.id`, `span.id` FROM Log WHERE `service.name` = 'mecanica-auth' AND `deployment.environment.name` = {{environment}} AND (category IN ('timeout', 'technical-failure') OR status >= 500) LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Diagnóstico — respostas 5xx do Gateway (até 100 logs)",
+          "layout": {
+            "row": 29,
+            "column": 7,
+            "width": 6,
+            "height": 4
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT timestamp, status, method, route, durationMs, integrationMs, requestId, extendedRequestId, id, xrayTraceId FROM Log WHERE `service.name` = 'mecanica-gateway' AND `cloud.account.id` = '121754142617' AND `cloud.region` = 'us-east-1' AND `deployment.environment.name` = {{environment}} AND status >= 500 AND status < 600 LIMIT 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Limites e diferenças entre as fontes",
+          "layout": {
+            "row": 33,
+            "column": 1,
+            "width": 12,
+            "height": 5
+          },
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "**Handler e plataforma Lambda são fontes diferentes:** uma resposta HTTP 500 tratada pode não aumentar AWS/Lambda Errors. Errors inclui exceções/runtime/timeouts; Throttles não entra em Invocations. A Duration AWS e o histograma do handler têm limites de medição diferentes. Os gráficos CloudWatch não somam médias nem calculam percentis sobre médias de minutos.\n**Notificações:** success em **simulated** indica apenas conclusão da simulação, sem entrega ao destinatário. Falhas de notificação são separadas da operação persistida.\n**Diagnóstico parcial:** access logs podem ter lacunas ou duplicações; a amostra histórica comprovou 19 de 28 request IDs, sem causa definitiva estabelecida. Tabelas limitadas não representam cobertura completa nem alimentam as taxas oficiais. IDs são técnicos; nenhum corpo bruto ou conteúdo de segmentos X-Ray é mostrado.\n**Cobertura pendente:** CPU/conexões RDS não são taxa de erros PostgreSQL. Não existem contadores completos por tentativa/falha de PostgreSQL, SSM ou Secrets Manager; contagem de spans não os substitui. A união automática de X-Ray/OTLP no New Relic permanece pendente.\nSomente sinais já coletados: sem reconstrução, preenchimento de lacunas ou garantia de entrega única. Contadores podem retornar zero sem séries; médias/percentuais sem denominador ficam ausentes. Períodos sem amostras não comprovam disponibilidade ou ausência de falhas."
+          }
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "environment",
+      "title": "Ambiente",
+      "type": "ENUM",
+      "isMultiSelection": false,
+      "replacementStrategy": "STRING",
+      "defaultValues": [
+        {
+          "value": {
+            "string": "hom"
+          }
+        }
+      ],
+      "items": [
+        {
+          "title": "hom",
+          "value": "hom"
+        },
+        {
+          "title": "prd",
+          "value": "prd"
+        }
+      ]
+    }
+  ]
+}

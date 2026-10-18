@@ -45,6 +45,7 @@ resource "aws_api_gateway_rest_api" "gateway" {
     precondition {
       condition = (
         length(local.api_operations) > 0 &&
+        length(distinct([for route in local.api_operations : route.key])) == length(local.api_operations) &&
         length(local.auth_operations) == 1 &&
         alltrue([for route in local.auth_operations : route.key == "POST /customers/validate"]) &&
         length(setintersection(toset([for route in local.api_operations : route.key]), toset([for route in local.auth_operations : route.key]))) == 0 &&
@@ -110,12 +111,13 @@ resource "aws_api_gateway_stage" "gateway" {
   stage_name            = var.environment
   variables             = { vpcLinkId = aws_apigatewayv2_vpc_link.api.id }
   cache_cluster_enabled = false
-  xray_tracing_enabled  = false
+  xray_tracing_enabled  = var.xray_tracing_enabled
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.access.arn
     format = jsonencode({
       requestId         = "$context.requestId"
       extendedRequestId = "$context.extendedRequestId"
+      xrayTraceId       = "$context.xrayTraceId"
       method            = "$context.httpMethod"
       route             = "$context.resourcePath"
       status            = "$context.status"

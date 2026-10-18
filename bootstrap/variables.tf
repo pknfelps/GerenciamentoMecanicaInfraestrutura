@@ -59,3 +59,13 @@ variable "existing_github_oidc_provider_arn" {
     error_message = "O provider existente deve ser do GitHub e da conta de destino."
   }
 }
+
+variable "new_relic_account_id" {
+  description = "Account ID numérico positivo do New Relic US, usado como ExternalId; não é a conta AWS nem a License Key."
+  type        = string
+  nullable    = false
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.new_relic_account_id))
+    error_message = "Informe o Account ID do New Relic como identificador numérico positivo."
+  }
+}
