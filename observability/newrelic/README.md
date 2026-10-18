@@ -1,6 +1,6 @@
-# Dashboard persistente de operação — New Relic
+# Dashboards persistentes — New Relic
 
-Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica — Operação da API e Kubernetes**, uma página com 20 painéis de consulta e dois blocos de orientação. Fonte: `dashboards/operations.json.tftpl`; recurso `newrelic_one_dashboard_json.operations`.
+Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica — Operação da API e Kubernetes**, uma página com 20 painéis de consulta e dois blocos de orientação. Fonte: `dashboards/operations.json.tftpl`; recurso `newrelic_one_dashboard_json.operations`. Acrescenta **Mecânica — Ordens de serviço**, uma página com 15 consultas e dois blocos de orientação, em `dashboards/orders.json.tftpl`/`newrelic_one_dashboard_json.orders`. Cada dashboard tem seu próprio filtro hom/prd.
 
 **Estado da entrega:** definição e consultas históricas validadas em 18/10/2026. Dashboard ainda não publicado; plano remoto, apply e conferência visual dependem de autorização posterior. Não há workflow novo nem inclusão nos workflows existentes.
 
@@ -11,7 +11,7 @@ Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica 
 - Variável do dashboard `environment`: lista hom/prd, seleção única, padrão hom. É filtro de visualização; não fornece isolamento de acesso. Não excluir o filtro ao comparar ambientes.
 - Permissão `PUBLIC_READ_ONLY`: leitura pelos usuários autorizados da conta; edição pelo proprietário. Não configura acesso público pela internet, links públicos ou compartilhamento externo.
 - Backend S3 existente `mecanica-tfstate-121754142617-us-east-1`, chave `shared/newrelic/terraform.tfstate`, região us-east-1, criptografia e lockfile nativo. Somente workspace default. Nenhuma leitura de estados externos.
-- O dashboard tem `prevent_destroy=true`. Os destroys AWS não alcançam esta unidade. Não executar destroy, remover proteção ou apagar o objeto de estado como parte do descarte de hom/prd.
+- Os dois dashboards têm `prevent_destroy=true`. Os destroys AWS não alcançam esta unidade. Não executar destroy, remover proteção ou apagar o objeto de estado como parte do descarte de hom/prd.
 - Todos os mantenedores usam o mesmo backend/Account ID. Não inicializar estados locais paralelos para publicar cópias. GUID e permalink são os únicos outputs.
 - Mudanças seguem PR e plano salvo. Edição manual no console causa divergência; refletir a mudança no template ou revisar o próximo plano antes de aplicar. Não importar exports com GUIDs/IDs de páginas/widgets como fonte de uma criação nova.
 
@@ -64,7 +64,7 @@ terraform plan -var-file=terraform.tfvars -out=tfplan
 terraform show -no-color tfplan
 ```
 
-Usar workspace default e revisar Account ID/credencial antes do plano. A primeira publicação deve propor **um dashboard criado**, sem mudanças AWS. `tfplan` é local/ignorado. Encerrar a sessão ou remover a variável ao terminar; ela precisará ser fornecida novamente se o apply ocorrer em outro processo.
+Usar workspace default e revisar Account ID/credencial antes do plano. A primeira publicação desta unidade, se nenhum dashboard tiver sido publicado, deve propor **dois dashboards criados**, sem mudanças AWS. Se operação já existir no estado, esperar somente a criação de ordens, preservando operação sem alterações. Não usar `-target` para esconder diferenças; revisar o plano completo. `tfplan` é local/ignorado. Encerrar a sessão ou remover a variável ao terminar; ela precisará ser fornecida novamente se o apply ocorrer em outro processo.
 
 **Parar para revisão do plano salvo.** Somente após sua aprovação, no mesmo checkout e unidade, com credenciais válidas no processo:
 
@@ -72,6 +72,8 @@ Usar workspace default e revisar Account ID/credencial antes do plano. A primeir
 terraform apply tfplan
 terraform output -raw operations_dashboard_guid
 terraform output -raw operations_dashboard_permalink
+terraform output -raw orders_dashboard_guid
+terraform output -raw orders_dashboard_permalink
 terraform plan -var-file=terraform.tfvars -detailed-exitcode
 ```
 
@@ -81,7 +83,7 @@ O último comando deve retornar código 0/nenhuma alteração; código 2 indica 
 Remove-Item Env:NEW_RELIC_API_KEY
 ```
 
-## Painéis e semântica
+## Operação — painéis e semântica
 
 | Bloco | Fontes e apresentação |
 |---|---|
@@ -119,6 +121,51 @@ Consultas executadas pela sessão do navegador na conta 8626152, sem chave admin
 
 A validação local usa o schema HCL do provider, JSON renderizado e revisão dos campos contra os tipos/exemplos do cliente oficial. A validação final do serviço para o documento, as permissões reais e o layout visual só será concluída no apply/conferência posterior. Evidências locais ignoradas no repositório da API: `artifacts/newrelic-operations/`.
 
+## Ordens de serviço — painéis e semântica
+
+Fonte: `dashboards/orders.json.tftpl`; 15 consultas e dois textos, sem datas fixas. Respeita o período global; sugestão de negócio: **sete dias**. A unidade usa o mesmo backend/provider/Account ID e a mesma User API Key; não inicializar um estado separado para ordens. Renderização offline: repetir o comando `templatefile` acima com `dashboards/orders.json.tftpl`.
+
+| Bloco | Fonte e regra |
+|---|---|
+| Atualização | Último `timestamp` por uma das cinco métricas de OS selecionadas; início do período da métrica, não chegada ao New Relic |
+| Volume | `sum(mecanica.orders.created)` no período; por dia com `FACET dateOf(timestamp)`, `WITH TIMEZONE 'America/Sao_Paulo'` e `LIMIT MAX` |
+| Diagnóstico | `stage=diagnosis`: média em minutos, quantidade de amostras e evolução da média |
+| Execução | `stage=execution`: média em minutos, quantidade de amostras e evolução da média |
+| Espera pela entrega | `stage=delivery_wait`, dois grupos explícitos: `completion.reason=service_completed` e `budget_rejected`; média, amostras e evolução para cada grupo |
+| Serviço completo | `mecanica.orders.service.duration`: média em minutos, serviços medidos e evolução |
+| Falhas | Soma de `mecanica.orders.processing.failures` por `operation`, separada da soma de `mecanica.orders.telemetry.failures` |
+
+Todas as consultas usam **Metric**, `service.name=mecanica-api` e `deployment.environment.name={{environment}}`. O filtro nativo substitui o ambiente como string; não colocar aspas extras em `{{environment}}`. Não usar identidade pessoal, UUID ou documento como dimensão. Não misturar ambientes, filtrar por pod/version ou contar spans/logs para obter volume de OS.
+
+`average(histograma)/60` exibe minutos; `count(histograma)` conta intervalos concluídos. A média usa todas as amostras recebidas de todas as réplicas, sem média de médias. `TIMESERIES AUTO` usa buckets escolhidos pelo New Relic; uma média por bucket não deve ser promediada novamente para obter a média do período. Não somar médias de etapas para calcular o serviço completo. Contadores usam soma dos incrementos, sem `rate` para representar o total.
+
+Diagnóstico: InDiagnosis → WaitingForApproval. Execução: InExecution → Finished/ServiceCompleted. Espera pela entrega: Finished → Delivered, separando conclusão e recusa. Serviço completo: Received → Finished/ServiceCompleted, sem aguardar entrega e sem incluir orçamento recusado. O período da duração está associado à medição da transição concluída, não à abertura da OS. Intervalos abertos/incompatíveis não são amostras zero; duração efetivamente zero é válida.
+
+Criações confirmadas permanecem contadas após exclusão/recusa. A amostragem HTTP atual não produz estoque de OSs abertas, distribuição atual por estado, aprovação percentual ou relatório individual de OS. Falha técnica é resposta 500 de ação reconhecida de OS; negativas 4xx e cancelamento pelo cliente não entram. Falha de leitura/cálculo da medição após o commit é indicador de qualidade dos dados e não desfaz a operação persistida. Não há percentual de falhas usando criações como denominador.
+
+Volume diário usa o dia do timestamp da métrica em São Paulo; início/fim selecionados podem cortar dias. `LIMIT MAX` continua sujeito ao limite de facets do New Relic; não garante uma quantidade ilimitada de dias. Janelas OTLP podem atravessar meia-noite; **SQL é a referência exata por data do acontecimento**, com início inclusivo e fim exclusivo. As [regras e consultas SQL existentes](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/OBSERVABILIDADE_NEGOCIO.md) permanecem a fonte de reconciliação, inclusive para OS excluída. Destruir o banco encerra a disponibilidade daquele histórico.
+
+Não há preenchimento de lacunas, `OR 0`, backfill, reprocessamento, deduplicação ou garantia de entrega única. Contadores e contagem de amostras podem retornar zero nativo sem séries; médias ausentes ficam nulas e gráficos facetados podem ficar vazios. Conferir atualização; zero não comprova saúde/coleta. Notificações, integrações e alertas ficam em entrega separada.
+
+### Conferência histórica de ordens — 18/10/2026
+
+As 15 consultas foram executadas para hom e para prd pela sessão do New Relic na conta 8626152, sem User API Key local, publicar dashboard, acessar banco ou gerar novas requisições. Janela **18/10/2026 00:22:30–00:49:40 UTC**, equivalente à noite de **17/10 em São Paulo**. A tabela diária retornou `October 17, 2026` com três criações.
+
+| Indicador hom | Amostras | Soma de referência (s) | Média consultada (min) |
+|---|---:|---:|---:|
+| Criações | 3 | — | — |
+| Diagnóstico | 2 | 3,112321 | 0,02593600833333333 |
+| Execução | 1 | 1,087185 | 0,01811975 |
+| Entrega após serviço concluído | 1 | 1,304562 | 0,0217427 |
+| Entrega após orçamento recusado | 1 | 1,659814 | 0,027663566666666663 |
+| Serviço completo | 1 | 9,681048 | 0,16135080000000002 |
+
+As médias/contagens reproduzem as somas e amostras da [evidência SQL já salva](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_HOM_2026-10-17.md). Séries temporais retornaram os buckets com médias correspondentes, sem preencher períodos sem amostras. Não há falhas de processamento na janela (sem facets); falhas de medição retornaram zero nativo. Isso valida as consultas, não um cenário de falha não ocorrido. Prd ficou sem séries: médias nulas, contagens/somas nativas zero, nenhuma mistura com hom; não comprova operação de prd.
+
+As 30 consultas executadas correspondem às strings renderizadas do template, com substituição literal de ambiente/janela somente na validação. Evidências locais ignoradas no repositório da API: `artifacts/newrelic-orders/` (JSON renderizado, resultados consolidados e fingerprints das consultas). Terraform fmt/init sem backend/validate e renderização pelo `terraform console` em pasta de artefatos aprovados. Não alterados provider/lockfile, backend, recursos AWS, aplicações, Collectors ou workflows.
+
+**Publicação pendente:** gerar plano salvo após autorização, revisar e aplicar exclusivamente o plano aprovado. Depois conferir layout/período/filtro/unidades/ausência de dados e novo plano sem diferenças. E5.6/E5.7/E5.7a têm definição e consultas preparadas/validadas, sem marcar publicação/conferência visual como concluídas.
+
 ## Referências
 
 - [Provider 3.99.3 — recurso JSON](https://github.com/newrelic/terraform-provider-newrelic/blob/v3.99.3/newrelic/resource_newrelic_one_dashboard_json.go)
@@ -129,3 +176,5 @@ A validação local usa o schema HCL do provider, JSON renderizado e revisão do
 - [NRQL: percentis, campos compostos e funções](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/)
 - [Coleta e consultas Kubernetes](../../docs/COLLECTOR_API.md)
 - [Validação da correlação/API em hom](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/VALIDACAO_CORRELACAO_HOM_2026-10-18.md)
+
+- [NRQL: agrupamento por data e fuso horário](https://docs.newrelic.com/docs/nrql/nrql-references/nrql-group-results-across-time/)

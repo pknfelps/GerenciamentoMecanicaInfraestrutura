@@ -8,7 +8,7 @@ AWS deste repositório em Terraform; Service e namespace em manifestos Kubernete
 | terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
 | kubernetes | Service NodePort e namespace database-init; Collector New Relic e coleta Kubernetes em Kustomization independente |
 | gateway | REST API Regional, VPC Link V2, integrações API/Lambda, logs e SSM próprios |
-| observability/newrelic | Dashboard persistente de operação, JSON versionado/Terraform local; independente dos destroys AWS |
+| observability/newrelic | Dashboards persistentes de operação e OS, JSON versionado/Terraform local; independentes dos destroys AWS |
 
 Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP comprovadas em hom em 17/10/2026; prd não validado.
 
@@ -55,8 +55,8 @@ O bootstrap prepara policies gerenciadas de inspeção para base/API/auth/banco 
 
 Preparada e validada localmente em 18/10/2026: logs de acesso do Gateway e 13 métricas essenciais Gateway/Lambda/RDS pelo Collector existente. Retomada dos últimos cinco minutos em cada inicialização, sem persistência ou deduplicação; consultas de métricas a cada minuto, com atraso de dez minutos. Terraform da base administra somente a policy adicional de leitura da role do Collector e sua descrição. Workflows/bootstrap/API/Lambda preservados. Após PRs, executar somente base-provision e conferir ingestão em hom; E5.14 permanece parcial. [Configuração, IAM, recuperação, NRQL e descarte](docs/CLOUDWATCH.md).
 
-## Dashboard de operação como código — E5
+## Dashboards como código — E5
 
-Unidade independente em [observability/newrelic](observability/newrelic/README.md): um dashboard API/Kubernetes, JSON com 20 consultas e dois blocos explicativos, filtro hom/prd (padrão hom), provider New Relic 3.99.3 e estado S3 shared/newrelic/terraform.tfstate. Não participa de base-provision/base-destroy nem cria workflow. Usa User API Key apenas no ambiente do processo; a License Key de ingestão permanece exclusiva dos Collectors.
+Unidade independente em [observability/newrelic](observability/newrelic/README.md): dashboards API/Kubernetes (20 consultas) e Ordens de serviço (15 consultas), dois blocos explicativos por dashboard e filtro hom/prd (padrão hom), provider New Relic 3.99.3 e estado S3 shared/newrelic/terraform.tfstate. Não participa de base-provision/base-destroy nem cria workflow. Usa User API Key apenas no ambiente do processo; a License Key de ingestão permanece exclusiva dos Collectors.
 
-Definição e consultas históricas validadas em 18/10/2026; publicação ainda não realizada. Plano remoto/aplicação exigem autorização posterior, sem necessidade de subir API/EKS para consultar o histórico retido. Estado/dashboard persistem nos descartes AWS; prevent_destroy habilitado. Dashboards de OS/integrações e alertas ficam para próximas entregas.
+Definição e consultas históricas validadas em 18/10/2026; publicação ainda não realizada. Plano remoto/aplicação exigem autorização posterior, sem necessidade de subir API/EKS para consultar o histórico retido. Estado/dashboard persistem nos descartes AWS; prevent_destroy habilitado. OS inclui volume diário em São Paulo, durações concluídas em minutos com amostras e falhas de processamento/medição. As 30 consultas hom/prd de OS foram conferidas com a janela histórica 18/10 00:22:30–00:49:40 UTC e a evidência SQL; prd sem dados não é comprovação operacional. Dashboard de integrações e alertas ficam para próximas entregas.
