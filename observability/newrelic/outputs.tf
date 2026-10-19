@@ -37,3 +37,13 @@ output "orders_processing_alert_condition_ids" {
   description = "IDs das condições de falha técnica de OS por ambiente."
   value       = { for environment, condition in newrelic_nrql_alert_condition.orders_processing : environment => condition.id }
 }
+
+output "orders_notifications_alert_policy_id" {
+  description = "ID da policy de falhas de notificação de OS."
+  value       = newrelic_alert_policy.orders_notifications.id
+}
+
+output "orders_notifications_alert_condition_ids" {
+  description = "IDs das condições de falha de notificação de OS por ambiente."
+  value       = { for environment, condition in newrelic_nrql_alert_condition.orders_notifications : environment => condition.id }
+}

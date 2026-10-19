@@ -176,6 +176,9 @@ jobs:
             policy_id="$(terraform output -raw orders_processing_alert_policy_id)"
             printf -- '- Policy de falha tecnica de OS: %s\n' "$policy_id"
             terraform output -json orders_processing_alert_condition_ids | jq -r 'to_entries[] | "- Condicao OS \(.key): \(.value)"'
+            policy_id="$(terraform output -raw orders_notifications_alert_policy_id)"
+            printf -- '- Policy de falha de notificacao de OS: %s\n' "$policy_id"
+            terraform output -json orders_notifications_alert_condition_ids | jq -r 'to_entries[] | "- Condicao notificacao OS \(.key): \(.value)"'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Check for remaining changes
         env:
