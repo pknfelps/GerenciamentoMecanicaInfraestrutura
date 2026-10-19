@@ -237,7 +237,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.deployment.desired`) AS 'Desejadas', latest(`k8s.deployment.available`) AS 'Disponíveis' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.deployment.name` LIMIT 100"
+                "query": "SELECT latest(`k8s.deployment.desired`) AS 'Desejadas', latest(`k8s.deployment.available`) AS 'Disponíveis' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('k8s.deployment.desired', 'k8s.deployment.available') FACET `k8s.namespace.name`, `k8s.deployment.name` LIMIT 100"
               }
             ]
           }
@@ -257,7 +257,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.pod.phase`) AS 'Fase: Pending=1 Running=2 Succeeded=3 Failed=4 Unknown=5' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100"
+                "query": "SELECT latest(`k8s.pod.phase`) AS 'Fase: Pending=1 Running=2 Succeeded=3 Failed=4 Unknown=5' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName = 'k8s.pod.phase' FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100"
               }
             ]
           }
@@ -277,7 +277,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.container.ready`) AS 'Ready (1/0)', latest(`k8s.container.restarts`) AS 'Reinícios no container atual' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
+                "query": "SELECT latest(`k8s.container.ready`) AS 'Ready (1/0)', latest(`k8s.container.restarts`) AS 'Reinícios no container atual' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('k8s.container.ready', 'k8s.container.restarts') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
               }
             ]
           }
@@ -297,7 +297,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.pod.cpu.usage`) AS 'CPU (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
+                "query": "SELECT latest(`k8s.pod.cpu.usage`) AS 'CPU (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName = 'k8s.pod.cpu.usage' FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
               }
             ]
           }
@@ -317,7 +317,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.pod.memory.working_set`) / 1048576 AS 'Working set (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
+                "query": "SELECT latest(`k8s.pod.memory.working_set`) / 1048576 AS 'Working set (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName = 'k8s.pod.memory.working_set' FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid` LIMIT 100 TIMESERIES AUTO"
               }
             ]
           }
@@ -337,7 +337,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`container.cpu.usage`) AS 'Utilizada (cores)', latest(`k8s.container.cpu_request`) AS 'Request (cores)', latest(`k8s.container.cpu_limit`) AS 'Limit (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
+                "query": "SELECT latest(`container.cpu.usage`) AS 'Utilizada (cores)', latest(`k8s.container.cpu_request`) AS 'Request (cores)', latest(`k8s.container.cpu_limit`) AS 'Limit (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('container.cpu.usage', 'k8s.container.cpu_request', 'k8s.container.cpu_limit') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
               }
             ]
           }
@@ -357,7 +357,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`container.memory.working_set`) / 1048576 AS 'Working set (MiB)', latest(`k8s.container.memory_request`) / 1048576 AS 'Request (MiB)', latest(`k8s.container.memory_limit`) / 1048576 AS 'Limit (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
+                "query": "SELECT latest(`container.memory.working_set`) / 1048576 AS 'Working set (MiB)', latest(`k8s.container.memory_request`) / 1048576 AS 'Request (MiB)', latest(`k8s.container.memory_limit`) / 1048576 AS 'Limit (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('container.memory.working_set', 'k8s.container.memory_request', 'k8s.container.memory_limit') FACET `k8s.namespace.name`, `k8s.pod.name`, `k8s.pod.uid`, `k8s.container.name` LIMIT 100"
               }
             ]
           }
@@ -377,7 +377,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.node.cpu.usage`) AS 'Utilizada (cores)', latest(`k8s.node.allocatable_cpu`) AS 'Alocável (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.node.name` LIMIT 100 TIMESERIES AUTO"
+                "query": "SELECT latest(`k8s.node.cpu.usage`) AS 'Utilizada (cores)', latest(`k8s.node.allocatable_cpu`) AS 'Alocável (cores)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('k8s.node.cpu.usage', 'k8s.node.allocatable_cpu') FACET `k8s.node.name` LIMIT 100 TIMESERIES AUTO"
               }
             ]
           }
@@ -397,7 +397,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.node.memory.working_set`) / 1048576 AS 'Working set (MiB)', latest(`k8s.node.allocatable_memory`) / 1048576 AS 'Alocável (MiB)', latest(`k8s.node.memory.available`) / 1048576 AS 'Disponível (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.node.name` LIMIT 100 TIMESERIES AUTO"
+                "query": "SELECT latest(`k8s.node.memory.working_set`) / 1048576 AS 'Working set (MiB)', latest(`k8s.node.allocatable_memory`) / 1048576 AS 'Alocável (MiB)', latest(`k8s.node.memory.available`) / 1048576 AS 'Disponível (MiB)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('k8s.node.memory.working_set', 'k8s.node.allocatable_memory', 'k8s.node.memory.available') FACET `k8s.node.name` LIMIT 100 TIMESERIES AUTO"
               }
             ]
           }
@@ -417,7 +417,7 @@
             "nrqlQueries": [
               {
                 "accountId": ${account_id},
-                "query": "SELECT latest(`k8s.node.condition_ready`) AS 'Ready', latest(`k8s.node.condition_memory_pressure`) AS 'MemoryPressure', latest(`k8s.node.condition_disk_pressure`) AS 'DiskPressure', latest(`k8s.node.condition_pid_pressure`) AS 'PIDPressure', latest(getField(`k8s.node.uptime`, 'cumulative')) AS 'Uptime (s)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') FACET `k8s.node.name` LIMIT 100"
+                "query": "SELECT latest(`k8s.node.condition_ready`) AS 'Ready', latest(`k8s.node.condition_memory_pressure`) AS 'MemoryPressure', latest(`k8s.node.condition_disk_pressure`) AS 'DiskPressure', latest(`k8s.node.condition_pid_pressure`) AS 'PIDPressure', latest(getField(`k8s.node.uptime`, 'cumulative')) AS 'Uptime (s)' FROM Metric WHERE `deployment.environment.name` = {{environment}} AND `k8s.cluster.name` = concat('mecanica-', {{environment}}, '-eks') AND metricName IN ('k8s.node.condition_ready', 'k8s.node.condition_memory_pressure', 'k8s.node.condition_disk_pressure', 'k8s.node.condition_pid_pressure', 'k8s.node.uptime') FACET `k8s.node.name` LIMIT 100"
               }
             ]
           }
