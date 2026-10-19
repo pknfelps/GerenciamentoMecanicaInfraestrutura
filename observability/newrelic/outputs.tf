@@ -67,3 +67,13 @@ output "node_memory_alert_condition_ids" {
   description = "IDs das condições de working set elevado sobre memória alocável por ambiente, avaliadas por nó."
   value       = { for environment, condition in newrelic_nrql_alert_condition.node_memory : environment => condition.id }
 }
+
+output "api_availability_alert_policy_id" {
+  description = "ID da policy da API sem réplica disponível."
+  value       = newrelic_alert_policy.api_availability.id
+}
+
+output "api_availability_alert_condition_ids" {
+  description = "IDs das condições da API sem réplica disponível por ambiente."
+  value       = { for environment, condition in newrelic_nrql_alert_condition.api_availability : environment => condition.id }
+}
