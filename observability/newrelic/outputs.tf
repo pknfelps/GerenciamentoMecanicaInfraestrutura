@@ -47,3 +47,13 @@ output "orders_notifications_alert_condition_ids" {
   description = "IDs das condições de falha de notificação de OS por ambiente."
   value       = { for environment, condition in newrelic_nrql_alert_condition.orders_notifications : environment => condition.id }
 }
+
+output "node_cpu_alert_policy_id" {
+  description = "ID da policy de CPU elevada do nó sobre CPU alocável."
+  value       = newrelic_alert_policy.node_cpu.id
+}
+
+output "node_cpu_alert_condition_ids" {
+  description = "IDs das condições de CPU elevada sobre CPU alocável por ambiente, avaliadas por nó."
+  value       = { for environment, condition in newrelic_nrql_alert_condition.node_cpu : environment => condition.id }
+}
