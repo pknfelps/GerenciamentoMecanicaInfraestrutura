@@ -1,8 +1,8 @@
-# Dashboards persistentes — New Relic
+# Dashboards e alertas persistentes — New Relic
 
 Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica — Operação da API e Kubernetes**, uma página com 20 painéis de consulta e dois blocos de orientação. Fonte: `dashboards/operations.json.tftpl`; recurso `newrelic_one_dashboard_json.operations`. Acrescenta **Mecânica — Ordens de serviço**, uma página com 15 consultas e dois blocos de orientação, em `dashboards/orders.json.tftpl`/`newrelic_one_dashboard_json.orders`. Acrescenta **Mecânica — Integrações e autenticação**, uma página com 24 consultas/dois textos, em `dashboards/integrations.json.tftpl`/`newrelic_one_dashboard_json.integrations`. Cada dashboard tem seu próprio filtro hom/prd.
 
-**Estado da entrega:** os três dashboards foram publicados em 18/10/2026 pelo `newrelic-provision`, com plan/aprovação/apply e conferência final sem diferenças ([execução 39163312655](https://github.com/pknfelps/GerenciamentoMecanicaInfraestrutura/actions/runs/39163312655)). Bootstrap, Environments e Secret foram configurados; os principais resultados históricos e filtros foram conferidos na interface. Em 19/10/2026, a investigação abaixo identificou facetas vazias nas consultas Kubernetes e validou a seleção explícita de métricas. Este ajuste está preparado localmente; sua publicação exige nova execução do workflow após o PR. Os registros de preparação abaixo preservam as evidências de cada etapa e não substituem este estado atual.
+**Estado da entrega:** os três dashboards foram publicados e conferidos; a correção de facetas Kubernetes foi publicada pela [execução 39303143995](https://github.com/pknfelps/GerenciamentoMecanicaInfraestrutura/actions/runs/39303143995), com conferência posterior sem diferenças. Em 19/10/2026, os cinco alertas previstos foram preparados em Terraform, com condições hom/prd: falha técnica de processamento de OS, falha de notificação de OS, CPU elevada do nó, memória elevada do nó e API sem réplica disponível. CPU e memória usam referências alocáveis, acima de 80%/85% por cinco minutos; disponibilidade usa zero réplicas por dois minutos. O mantenedor confirmou o cadastro de NEW_RELIC_ALERT_EMAIL. Os cinco alertas estão definidos localmente; o mantenedor poderá publicar o PR e executar o workflow com revisão/aprovação do plano salvo. Nenhum alerta foi publicado nesta implementação; disparo e recebimento reais continuam pendentes. Os registros históricos abaixo preservam as evidências de preparação e não substituem este estado atual.
 
 ## Identidade, propriedade e estado
 
@@ -12,14 +12,14 @@ Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica 
 - Permissão `PUBLIC_READ_ONLY`: leitura pelos usuários autorizados da conta; edição pelo proprietário. Não configura acesso público pela internet, links públicos ou compartilhamento externo.
 - Backend S3 existente `mecanica-tfstate-121754142617-us-east-1`, chave `shared/newrelic/terraform.tfstate`, região us-east-1, criptografia e lockfile nativo. Somente workspace default. Nenhuma leitura de estados externos.
 - Os três dashboards têm `prevent_destroy=true`. Os destroys AWS não alcançam esta unidade. Não executar destroy, remover proteção ou apagar o objeto de estado como parte do descarte de hom/prd.
-- Todos os mantenedores usam o mesmo backend/Account ID. Não inicializar estados locais paralelos para publicar cópias. GUID e permalink são os únicos outputs.
+- Todos os mantenedores usam o mesmo backend/Account ID. Não inicializar estados locais paralelos para publicar cópias. Outputs contêm GUID/permalink dos dashboards e IDs das policies/condições dos cinco alertas; não expõem o destinatário.
 - Mudanças seguem PR e plano salvo. Edição manual no console causa divergência; refletir a mudança no template ou revisar o próximo plano antes de aplicar. Não importar exports com GUIDs/IDs de páginas/widgets como fonte de uma criação nova.
 
 ## Credenciais
 
-A **User API Key** administra dashboards e é diferente da **Ingest - License Key**, usada pelos Collectors para enviar telemetria. Esta unidade não lê o Secret de ingestão nem modifica IAM/Secrets Manager.
+A **User API Key** administra os recursos desta unidade (dashboards, policy/condições e notificações) e é diferente da **Ingest - License Key**, usada pelos Collectors para enviar telemetria. Esta unidade não lê o Secret de ingestão nem modifica IAM/Secrets Manager.
 
-O mantenedor deve obter uma User API Key de um usuário autorizado a criar/atualizar dashboards na conta escolhida. Cadastrar no GitHub como Secret `NEW_RELIC_API_KEY` do Environment `newrelic`; em operação local alternativa, fornecer somente ao processo por essa variável. Não enviar a chave no chat, versionar, colocar em tfvars/backend, usar `-var`, imprimir o ambiente ou ativar `TF_LOG` durante operações autenticadas.
+O mantenedor deve obter uma User API Key de um usuário autorizado a criar/atualizar dashboards, alertas e componentes de notificação na conta escolhida. Cadastrar no GitHub como Secret `NEW_RELIC_API_KEY` do Environment `newrelic`; em operação local alternativa, fornecer somente ao processo por essa variável. Não enviar a chave no chat, versionar, colocar em tfvars/backend, usar `-var`, imprimir o ambiente ou ativar `TF_LOG` durante operações autenticadas.
 
 A autenticação AWS é usada somente pelo backend S3, com a cadeia padrão de credenciais local e acesso ao objeto de estado/lock. Não há provider AWS nesta unidade. O workflow usa a role dedicada `mecanica-newrelic-github`, declarada no bootstrap, exclusivamente para estado/lock; a alternativa local usa a identidade autorizada do mantenedor. Se o perfil escolhido não tiver acesso, interromper e revisar a identidade; não alterar policies automaticamente.
 
@@ -63,7 +63,7 @@ Workflow [.github/workflows/newrelic-provision.yml](../../.github/workflows/newr
 
 | Environment | Configuração |
 |---|---|
-| `newrelic` | Branch main somente, sem tags. Variável `AWS_NEW_RELIC_ROLE_ARN` com o output do bootstrap; variável `NEW_RELIC_ACCOUNT_ID=8626152`; Secret `NEW_RELIC_API_KEY` com uma User API Key autorizada a administrar os dashboards |
+| `newrelic` | Branch main somente, sem tags. Variável `AWS_NEW_RELIC_ROLE_ARN` com o output do bootstrap; variável `NEW_RELIC_ACCOUNT_ID=8626152`; variável `NEW_RELIC_ALERT_EMAIL` com o destinatário escolhido; Secret `NEW_RELIC_API_KEY` com uma User API Key autorizada a administrar dashboards, alertas e notificações |
 | `newrelic-approval` | Branch main somente, sem tags; reviewer `pknfelps`, autorrevisão permitida. Não cadastrar credenciais, secrets ou variáveis AWS/New Relic |
 
 Usar usuário autorizado também a editar os dashboards já existentes; permissões PUBLIC_READ_ONLY não dão edição a todos os usuários. A chave deve ser cadastrada pelo mantenedor diretamente no GitHub, sem enviá-la no chat. Não usar License Key de ingestão, AWS Secrets Manager ou tfvars para essa credencial. Não cadastrar cópias desnecessárias da User API Key como repository/organization secret: este workflow espera a credencial no Environment `newrelic`.
@@ -71,9 +71,9 @@ Usar usuário autorizado também a editar os dashboards já existentes; permiss�
 ### Plano, aprovação e aplicação
 
 - **plan:** checkout do SHA exato da execução; checks de repositório/main/configuração; OIDC para conta 121754142617/us-east-1; Terraform 1.15.9, provider/lockfile existentes, workspace default e backend.hcl. Init com lockfile readonly, fmt/validate e `plan -out=tfplan -lock-timeout=60s`. A conta positiva validada fica registrada como output do job, usada pelo plano e pelo apply/conferência, mesmo se a variável do Environment mudar durante a aprovação.
-- O plano binário e `tfplan.txt` são os únicos arquivos enviados pelo upload-artifact, retidos por sete dias. Revisar o texto/commit/Account ID antes de aprovar. Sem dashboards anteriores, esperar três criações; os existentes não devem mudar nesta primeira publicação do workflow. O artefato contém configuração/estado planejado; não publicar externamente nem incluir .terraform, credenciais ou tfvars no upload.
+- O plano binário e `tfplan.txt` são os únicos arquivos enviados pelo upload-artifact, retidos por sete dias. Revisar o texto/commit/Account ID antes de aprovar. Com os cinco alertas ainda não publicados, esperar vinte e seis recursos novos: cinco policies, dez condições, um destino compartilhado, cinco canais e cinco workflows New Relic. Preservar os três dashboards existentes. Se o estado estiver inesperadamente vazio ou houver outras diferenças, revisar antes de aprovar. O artefato contém configuração/estado planejado; não publicar externamente nem incluir .terraform, credenciais ou tfvars no upload.
 - **approval:** Environment `newrelic-approval`, `permissions: {}`, sem checkout, autenticação AWS, User API Key ou acesso aos artefatos pelo job. A revisão é feita pelo mantenedor no plano do job anterior.
-- **apply:** checkout do mesmo SHA, autenticação nova e download pelo ID retornado pelo plan desta execução; init readonly e `terraform apply ... tfplan`. Não recria o plano antes do apply. Resumo com commit, Account ID e GUIDs/permalinks dos três dashboards.
+- **apply:** checkout do mesmo SHA, autenticação nova e download pelo ID retornado pelo plan desta execução; init readonly e `terraform apply ... tfplan`. Não recria o plano antes do apply. Resumo com commit, Account ID, GUIDs/permalinks dos três dashboards e IDs das policies/condições dos cinco alertas.
 - Conferência posterior executa `plan -detailed-exitcode`, sem salvar/aplicar outro plano: 0 confirma ausência de diferenças; 2 falha com diagnóstico de divergência; demais erros também falham. Não há rollback/reparo automático.
 
 A User API Key real existe no ambiente apenas dos passos Create saved plan, Apply approved plan e Check for remaining changes. Validate usa placeholder não secreto; os passos de aprovação, autenticação OIDC, upload/download, show e outputs não recebem a chave. O provider lê a chave do processo; ela não é argumento Terraform, variável TF_VAR, arquivo ou output. Não ativar TF_LOG, imprimir ambiente ou adicionar headers/chave aos diagnósticos.
@@ -99,6 +99,7 @@ Não é necessário subir API, Lambda, banco ou Gateway para publicar o dashboar
 ```powershell
 $env:NEW_RELIC_API_KEY = Read-Host 'New Relic User API Key' -MaskInput
 Copy-Item terraform.tfvars.example terraform.tfvars
+# Preencher new_relic_alert_email no terraform.tfvars local antes do plan.
 terraform init -backend-config=backend.hcl -input=false -lockfile=readonly
 terraform workspace show
 terraform plan -var-file=terraform.tfvars -out=tfplan
@@ -293,3 +294,302 @@ fmt/init sem backend/validate e renderização Terraform aprovados. JSON, grade 
 - [NRQL: agrupamento por data e fuso horário](https://docs.newrelic.com/docs/nrql/nrql-references/nrql-group-results-across-time/)
 
 - [Métricas Lambda: Errors, Invocations, Throttles e Duration](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html)
+
+## Alerta de processamento de OS
+
+**19/10/2026 — Implementado e validado localmente, sem publicação ou envio de e-mail.** Esta seção descreve o primeiro alerta; a entrega seguinte de notificação de OS está documentada abaixo. O primeiro alerta permanece inalterado. Nenhuma alteração de instrumentação, Collector, IAM ou infraestrutura AWS.
+
+### Fonte e avaliação
+
+`orders-alerts.tf` acrescenta uma policy com `PER_CONDITION` e duas condições habilitadas, uma para hom e outra para prd. Cada consulta soma `mecanica.orders.processing.failures`, restringindo explicitamente `metricName`, `service.name=mecanica-api` e o ambiente. Todas as operações, réplicas e versões participam da soma; não há FACET, taxa, denominador, filtro por pod/commit ou contagem por logs/spans. A API já conta uma falha por resposta 500 de ação de OS, excluindo cancelamento pelo cliente e respostas 400/401/403/404/409/422.
+
+| Configuração | Valor |
+|---|---|
+| Severidade | Critical; sem Warning |
+| Limiar | Soma >= 1 |
+| Janela | 300 segundos, sem sobreposição |
+| Fechamento da janela | event_timer, temporizador de 60 segundos |
+| Avaliação do limiar | threshold_duration=300, AT_LEAST_ONCE |
+| Lacunas | fill_option=none, sem preencher com zero/último valor |
+| Expiração | 600 segundos sem pontos recebidos para o sinal |
+| Na expiração | Encerrar incidentes; não abrir incidente por ausência |
+
+Uma falha isolada pode disparar, sem exigir falhas contínuas por cinco minutos. Coleta, transporte, fechamento da janela e avaliação acrescentam atraso; o temporizador não é promessa de entrega do e-mail em 60 segundos. As condições são de streaming: não reprocessam a janela histórica dos dashboards.
+
+Uma medição real abaixo do limiar pode encerrar o incidente pelas regras nativas. **Encerramento por dez minutos sem pontos indica ausência de sinal, não recuperação comprovada da API.** Depois de desligar o ambiente, ausência de pontos não abre um novo incidente. Um incidente já aberto pode encerrar por expiração e enviar sua notificação de encerramento. A plataforma exige um limite máximo de duração do incidente: configurado o máximo nativo de 30 dias, independente da expiração de dez minutos. Fechamento manual ou por esse limite também não comprova recuperação.
+
+### E-mail e isolamento
+
+A variável obrigatória `new_relic_alert_email`, marcada como sensível, recebe o destinatário por `NEW_RELIC_ALERT_EMAIL` no Environment GitHub `newrelic`. O mantenedor deve cadastrar ali o endereço que escolheu para os alertas; nenhum endereço pessoal foi versionado. O exemplo usa `alerts@example.invalid`, apenas para validação, e deve ser substituído antes de qualquer publicação local. O destino `mecanica-alertas-email` poderá ser reutilizado pelas próximas entregas.
+
+O valor fica oculto no plano textual e não é output/resumo. Isso não o remove do plano binário/estado Terraform: ambos devem continuar protegidos no backend/artefato existentes. A User API Key continua somente em `NEW_RELIC_API_KEY`; não reutilizar License Key, alterar IAM ou ampliar acesso automaticamente se a conta/usuário não puder administrar alertas/notificações.
+
+O canal EMAIL/IINT inclui estado, nome da condição (com ambiente), link do incidente e dashboard de ordens. Não acrescenta dados pessoais de clientes, payloads, documentos, tokens, credenciais ou mensagens de exceção. O workflow **de notificações New Relic** filtra somente o ID desta policy, avisa apenas ACTIVATED/CLOSED e respeita silenciamento total/parcial. Não há novo workflow GitHub, agendamento ou regra de muting. Condições e incidentes são separados por ambiente.
+
+### Publicação
+
+1. `NEW_RELIC_ALERT_EMAIL` já foi cadastrada no Environment `newrelic`, conforme confirmação do mantenedor; preservar a mesma User API Key e as demais variáveis. Não cadastrar credenciais no `newrelic-approval`.
+2. Aguardar a preparação dos cinco alertas previstos antes do PR para main e da execução de `newrelic-provision`. Não publicar este alerta isoladamente nesta etapa.
+3. O primeiro alerta representa **6 recursos novos**, uma policy, duas condições, um destino, um canal e um workflow New Relic. Somado ao alerta de notificação, são **11 criações esperadas neste estágio**; o plano final incorporará os próximos três alertas. Dashboards e recursos AWS não devem mudar. Revisar diferenças inesperadas antes de aprovar.
+4. Aprovar e aplicar exclusivamente o plano salvo. O destinatário do apply é o congelado no plano. A conferência posterior usa o valor atual da variável do Environment; se ela mudar durante a aprovação, a divergência exigirá nova execução completa, sem segundo apply automático.
+5. Conferir resumo com IDs da policy e das condições, final sem diferenças, condições habilitadas, consulta/tempos, filtro da policy, muting e gatilhos de e-mail. Concluir confirmação de destinatário se exigida pelo serviço. Não disparar mensagem de teste sem autorização.
+
+O mesmo backend persistente conserva dashboards e alertas fora dos destroys AWS. Não é necessário subir API, Lambda, banco, Gateway ou Collector para publicar a configuração. O CI existente valida a unidade e mantém a renderização dos três dashboards sem credenciais reais; nenhuma suíte, script ou mock novo.
+
+### Investigação e comprovação posterior
+
+Na abertura, identificar ambiente, condição e janela no incidente; consultar o dashboard de ordens no mesmo ambiente/período, somar as falhas e verificar a operação. Usar os logs sanitizados/correlação para investigar a causa; não reenviar conteúdo sensível. Não confundir falha de processamento com falha de notificação ou de medição após commit. No encerramento, conferir a causa: ausência de pontos exige verificar a saúde/coleta separadamente.
+
+Após publicação, em uma etapa autorizada com hom ativo: provocar uma falha controlada de ação de OS, confirmar resposta 500, incremento da métrica, incidente e recebimento do e-mail. Uma única falha deve bastar; negativas de negócio não devem disparar. Conferir que o incidente de hom não abre em prd, que não há notificação duplicada de abertura e que o encerramento após ausência do sinal não é apresentado como recuperação comprovada. Não criar endpoint de falhas, enviar métrica sintética ou causar indisponibilidade como parte desta implementação.
+
+Se pontos reais de valor zero continuarem chegando depois da falha, o cenário não é de ausência de sinal: registrar o fechamento normal e reservar a comprovação dos 600 segundos de silêncio para uma etapa controlada autorizada. Falha na entrega/ativação exige diagnóstico; não ampliar permissões ou repetir e-mails automaticamente.
+
+fmt/init sem backend/validate, renderização dos três JSONs, grafo Terraform e actionlint 1.7.12 com ShellCheck 0.11.0 aprovados localmente, com placeholders e sem acesso AWS/New Relic. Templates/provider/lockfile/backend/CI preservados por checksum. **E5.5 permanece parcial até o disparo e recebimento reais.**
+
+## Alerta de notificação de OS
+
+**19/10/2026 — Implementado e validado localmente, com publicação conjunta posterior.** Segundo dos cinco alertas previstos, independente do alerta de processamento de OS. Sem publicação, mensagens de teste, tráfego induzido ou operações AWS. O destino de e-mail existente é compartilhado; não há outro destinatário, variável ou workflow GitHub.
+
+### Fonte e avaliação
+
+`order-notification-alerts.tf` define a policy **Mecânica — Falhas de notificação de OS**, com `PER_CONDITION`, e duas condições estáticas habilitadas, uma por ambiente. A consulta soma os incrementos de todas as versões e réplicas da API e dos dois tipos de notificação; não segmenta por FACET, pod, commit ou OS. Para prd, o Terraform troca somente o ambiente da consulta:
+
+```sql
+SELECT sum(`mecanica.orders.notifications`)
+FROM Metric
+WHERE metricName = 'mecanica.orders.notifications'
+  AND `service.name` = 'mecanica-api'
+  AND `deployment.environment.name` = 'hom'
+  AND outcome = 'failure'
+  AND `notification.type` IN ('budget_available', 'status_changed')
+  AND mode IN ('smtp', 'simulated')
+```
+
+| Configuração | Valor |
+|---|---|
+| Severidade e limiar | Critical, soma >= 1; sem Warning |
+| Janela | 300 segundos, sem janela deslizante |
+| Agregação | event_timer, temporizador de 60 segundos |
+| Avaliação | threshold_duration=300, AT_LEAST_ONCE |
+| Lacunas | Nenhum preenchimento; fill_option=none |
+| Expiração | 600 segundos após o último ponto do sinal |
+| Ao expirar | Encerrar incidentes existentes, sem abrir por ausência |
+| Limite máximo nativo | 30 dias, independente da expiração |
+
+Uma falha isolada pode disparar; não precisa ocorrer continuamente por cinco minutos. Transporte, fechamento da janela e avaliação acrescentam atraso: não há promessa de e-mail imediato. Logs, spans, falhas HTTP gerais e percentuais não são fonte desta condição. Pontos reais de zero podem encerrar pelo comportamento normal; silêncio é um cenário distinto e não deve ser simulado com preenchimento artificial.
+
+A tentativa inclui consultas de cliente/veículo, montagem da mensagem e envio. **Em hom/prd, o adaptador de envio é simulado**: falha no fluxo não afirma tentativa de entrega SMTP real. A falha tratada não desfaz a operação persistida da OS. Métricas ausentes ou encerramento por dez minutos sem pontos não comprovam recuperação, entrega posterior ou reprocessamento. Não há reenvio automático. Fechamento manual ou pelo limite máximo também não prova recuperação.
+
+### E-mail e isolamento
+
+O canal EMAIL/IINT reutiliza `newrelic_notification_destination.alerts_email` e `new_relic_alert_email`, recebida por `NEW_RELIC_ALERT_EMAIL` no Environment `newrelic`, já cadastrada pelo mantenedor. O exemplo versionado permanece fictício; nenhum endereço pessoal é acrescentado ao código ou aos outputs. O plano binário e o estado ainda contêm o valor sensível e continuam protegidos pelos mecanismos existentes.
+
+O workflow de notificações New Relic filtra `labels.policyIds` pelo ID exato desta nova policy, notifica somente `ACTIVATED`/`CLOSED` e respeita silenciamento total/parcial. Não mistura incidentes com a policy de processamento. Assunto/corpo indicam condição/ambiente e estado; incluem link do incidente e do **dashboard Integrações e autenticação**, para consultar o bloco de notificações. Mensagens fixas sem dados do destinatário de negócio, documentos, tokens ou mensagens originais de exceção.
+
+### Investigação e comprovação posterior
+
+1. Conferir ambiente, condição e janela do incidente; consultar o bloco de notificações no dashboard de integrações usando o mesmo ambiente/período.
+2. Separar `notification.type=budget_available/status_changed`, `mode=smtp/simulated` e `outcome=failure`, sem confundir sucesso simulado com entrega real ou falha de notificação com falha da operação persistida.
+3. Investigar logs sanitizados e traces disponíveis, incluindo falhas nas consultas necessárias ao envio. Não reenviar payloads ou valores sensíveis. Ausência de logs/spans não prova ausência de falha.
+4. No encerramento, verificar se houve avaliação abaixo do limiar, expiração, fechamento manual ou limite máximo; não declarar recuperação nem reenvio pelo simples fechamento.
+
+Depois da publicação conjunta e de autorização específica, em hom ativo, conferir uma falha controlada do fluxo de notificação, incremento da métrica, abertura do incidente e recebimento do e-mail do New Relic. Confirmar preservação da operação persistida da OS, isolamento de prd, gatilhos/muting e encerramento após ausência de sinal. Não provocar HTTP 500 como requisito deste teste: o handler trata a falha de notificação separadamente. Se zeros reais continuarem chegando, registrar o fechamento normal e reservar o teste de silêncio para outra janela autorizada. Nenhuma falha, métrica sintética, mensagem de teste ou novo endpoint será criado nesta implementação.
+
+O e-mail do **New Relic** avisa o mantenedor; não comprova que a API entregou e-mail de negócio ao cliente. Se o serviço exigir confirmação do destinatário, concluí-la antes do teste real. Não alterar permissões, reenviar mensagens ou implementar retentativas automaticamente.
+
+### Publicação conjunta e validação
+
+Este alerta acrescenta **5 recursos**: uma policy, duas condições, um canal e um workflow New Relic. Reutiliza o destino do primeiro alerta (6 recursos), totalizando **11 criações esperadas neste estágio**, sem mudanças nos três dashboards. O mantenedor optou por concluir os cinco alertas antes do PR e da execução de `newrelic-provision`; o plano final será revisado considerando todas essas entregas.
+
+A pipeline existente conserva plan → aprovação → apply exclusivo do plano salvo e conferência sem segundo apply. O resumo acrescenta `orders_notifications_alert_policy_id` e `orders_notifications_alert_condition_ids` (hom/prd), sem expor o destinatário. Publicação independe de API/Lambda/banco/Gateway ativos; comprovação do disparo requer etapa autorizada com o fluxo funcionando em hom.
+
+Terraform fmt/init sem backend/validate, grafo de dependências, validação no mesmo modo offline do CI, renderização dos três JSONs e actionlint 1.7.12/ShellCheck 0.11.0 aprovados localmente, com placeholders sem credenciais reais. Primeiro alerta, templates, recursos dos dashboards, provider, lockfile, backend, variáveis e CI/renderização preservados por checksum (13 arquivos). Evidências locais ignoradas na API: `artifacts/newrelic-notification-alert/`. Nenhuma suíte de telemetria, mock ou script criado. A validação local não comprova aceitação remota da consulta, roteamento ou entrega. **E5 permanece parcial até publicação e comprovação real de disparo, recebimento e encerramento.**
+
+## Alerta de CPU elevada do nó
+
+**19/10/2026 — Terceiro alerta implementado e validado localmente, com publicação conjunta posterior.** CPU média utilizada acima de **80% da CPU alocável** por cinco minutos consecutivos, com condições estáticas habilitadas hom/prd. A referência alocável foi escolhida pelo mantenedor: a capacidade total inclui reservas do Kubernetes e não é o denominador deste alerta. Sem alteração de Collector, instrumentação, recursos AWS, alertas anteriores ou dashboards.
+
+### Consulta e avaliação por nó
+
+`node-cpu-alerts.tf` define a policy **Mecânica — CPU elevada do nó**, com `PER_CONDITION_AND_TARGET`, separando incidentes por condição e nó. Consulta para hom (prd usa seu ambiente e cluster):
+
+```sql
+SELECT 100 * average(`k8s.node.cpu.usage`)
+  / latest(`k8s.node.allocatable_cpu`)
+FROM Metric
+WHERE `deployment.environment.name` = 'hom'
+  AND `k8s.cluster.name` = 'mecanica-hom-eks'
+  AND metricName IN (
+    'k8s.node.cpu.usage',
+    'k8s.node.allocatable_cpu'
+  )
+FACET `k8s.node.name`
+```
+
+Cada nó usa a CPU média utilizada e o valor de CPU alocável mais recente **da mesma janela de um minuto**. Ambos estão em cores; multiplicar a razão por 100 resulta em percentual. Não somar nós, amostras temporais ou containers como se fossem consumo simultâneo; não usar CPU da API/RDS, requests ou limits. Sem filtro service.name, porque estas métricas Kubernetes não pertencem ao serviço mecanica-api. Sem LIMIT/SINCE/UNTIL/TIMESERIES na condição de streaming.
+
+Não fixar a capacidade em dois cores, reutilizar denominador de janela anterior, preencher ausência com zero/último valor ou limitar o percentual a 100%. Na evidência de hom, 1,93 cores eram alocáveis: 80% corresponde a 1,544 cores; 1,6 cores representa aproximadamente 82,90% alocável, embora represente 80% de dois cores totais. Esta diferença é intencional e não altera os painéis existentes de utilização/alocável em cores.
+
+| Configuração | Valor |
+|---|---|
+| Severidade | Critical; sem Warning |
+| Operador/limiar | above, 80; exatamente 80% não viola |
+| Agregação | Janela de 60 s, event_flow, atraso de 60 s |
+| Avaliação | threshold_duration=300, ALL; sem janela deslizante |
+| Lacunas | fill_option=none, sem preenchimento |
+| Expiração | 600 s sem pontos por sinal/faceta |
+| Na expiração | Encerrar incidentes existentes, sem abrir por ausência |
+| Limite máximo nativo | 30 dias, independente da expiração |
+
+O alerta exige médias de um minuto superiores a 80% durante cinco minutos consecutivos; um pico isolado não basta. Não é a média única de cinco minutos nem garante que todas as amostras instantâneas ficaram acima do limiar. Event flow acompanha a coleta existente de 30 s; transporte, fechamento das janelas e avaliação acrescentam atraso, sem promessa de e-mail imediato.
+
+CPU utilizada ou alocável ausente na janela não produz percentual válido e não conta como zero/minuto saudável. Sem denominador válido, não inventar capacidade. Uma leitura abaixo do limiar interrompe a sequência de violação; nenhuma lacuna é preenchida para manter ou encerrar artificialmente a sequência. Pontos válidos abaixo do limiar podem encerrar pelas regras nativas. **Encerramento por ausência de pontos, fechamento manual ou limite máximo não comprova recuperação.** Ambiente desligado não abre alerta por falta de sinal.
+
+A cobertura não muda: kubeletstats coleta somente o nó em que o Collector executa; k8s_cluster observa alocáveis do cluster, mas capacidade sem uso não cria percentual. Nós transitórios ou expansão permanente não ganham cobertura automaticamente. Não interpretar ausência do alerta como ausência de saturação em nós não cobertos.
+
+### Notificações e investigação
+
+Reutiliza `newrelic_notification_destination.alerts_email` e a variável NEW_RELIC_ALERT_EMAIL existente, sem duplicar destino ou imprimir destinatário nos outputs/resumo. Canal EMAIL/IINT e workflow New Relic exclusivos filtram o ID exato desta policy, notificam somente ACTIVATED/CLOSED e respeitam muting total/parcial. Não há regra de silenciamento ou agendamento novo.
+
+O e-mail inclui condição/ambiente, estado e links para o incidente e o dashboard **Operação da API e Kubernetes**. Identificar o nó pela faceta k8s.node.name no incidente, selecionar o mesmo ambiente/período e comparar uso médio/alocável por janela. Conferir pods e containers do nó, seus usos/requests/limits e atualização das séries; não confundir o denominador do nó com limites dos containers. Usar somente informações técnicas, sem dados de negócio ou mensagens originais de exceção.
+
+No encerramento, conferir a causa antes de declarar recuperação. Ausência de sinal pode significar nó/coleta removidos ou falha de exportação. Não ampliar recursos, alterar IAM/topologia ou executar carga automaticamente para investigar este alerta.
+
+### Publicação conjunta e validação
+
+Acrescenta **5 recursos**: uma policy, duas condições, um canal e um workflow New Relic. Com os dois alertas anteriores ainda não publicados, são **16 criações esperadas neste estágio**, preservando dashboards. Os números das seções anteriores descrevem cada entrega no momento de sua preparação. O PR e a publicação ocorrerão somente após concluir os cinco alertas; os de memória e disponibilidade continuam separados.
+
+`node_cpu_alert_policy_id` e `node_cpu_alert_condition_ids` (hom/prd) passam aos outputs e ao resumo de newrelic-provision. Preservados plano salvo → aprovação → apply exclusivo do plano salvo e conferência sem segundo apply. Publicar a definição independe de manter o ambiente ligado; verificar os valores e o disparo depende de dados reais retidos/novos e de etapa autorizada.
+
+Conferência local concluída: Terraform 1.15.9 fmt/init sem backend/validate/grafo de dependências e revisão estrutural da consulta/condições, além de actionlint 1.7.12 com ShellCheck 0.11.0 e renderização dos três JSONs. Validate também passou sem valores TF_VAR, como no CI. Os 26 arquivos do baseline permaneceram idênticos por SHA-256, incluindo os dois alertas anteriores, dashboards, Collector, provider/lockfile/backend e CI. Evidências locais ignoradas na API: `artifacts/newrelic-node-cpu-alert/`. Não criar testes de telemetria, scripts, mocks, métricas sintéticas ou carga. Esta conferência não comprova aceitação remota da NRQL, sustentação de cinco minutos, disparo ou entrega.
+
+Após publicação conjunta, conferir condições/facetas/roteamento e plano sem diferenças. Em hom ativo, comparar uso/alocável do mesmo nó/período com a expressão; comprovação de disparo/recebimento ocorrerá sob autorização própria, sem provocar carga nesta implementação. **E5 continua parcial: configuração local preparada, publicação e comprovação operacional pendentes.**
+
+## Alerta de memória elevada do nó
+
+**19/10/2026 — Quarto alerta implementado e validado localmente, com publicação conjunta posterior.** Working set acima de **85% da memória alocável** do nó por cinco minutos, com condições estáticas habilitadas hom/prd. O mantenedor escolheu o denominador alocável; não é a capacidade física total. Sem mudança de Collector, aplicações, recursos AWS, dashboards ou dos três alertas anteriores.
+
+### Consulta e avaliação por nó
+
+`node-memory-alerts.tf` define a policy **Mecânica — Memória elevada do nó**, com `PER_CONDITION_AND_TARGET`, separando incidentes por condição e nó. A consulta usa somente as duas métricas existentes, em bytes, sem service.name da API; prd recebe seu ambiente e cluster:
+
+```sql
+SELECT 100 * average(`k8s.node.memory.working_set`)
+  / latest(`k8s.node.allocatable_memory`)
+FROM Metric
+WHERE `deployment.environment.name` = 'hom'
+  AND `k8s.cluster.name` = 'mecanica-hom-eks'
+  AND metricName IN (
+    'k8s.node.memory.working_set',
+    'k8s.node.allocatable_memory'
+  )
+FACET `k8s.node.name`
+```
+
+Cada nó usa o working set médio e o valor alocável mais recente **da mesma janela de um minuto**, multiplicando a razão por 100. Não somar nós/pods nem usar memória do processo .NET, requests ou limits como substitutos. Memória disponível, working set e alocável têm definições distintas: não obter o numerador subtraindo memória disponível da alocável. Não fixar denominador, carregar capacidade de janela anterior, preencher ausência com zero/último valor ou limitar resultados superiores a 100%. Não usar LIMIT/SINCE/UNTIL/TIMESERIES na consulta de streaming.
+
+| Configuração | Valor |
+|---|---|
+| Severidade | Critical; sem Warning |
+| Operador/limiar | above, 85; exatamente 85% não viola |
+| Agregação | Janela de 60 s, event_flow, atraso de 60 s |
+| Avaliação | threshold_duration=300, ALL; sem janela deslizante |
+| Lacunas | fill_option=none, sem preenchimento |
+| Expiração | 600 s sem pontos por sinal/faceta |
+| Ao expirar | Encerrar incidentes existentes, sem abrir por ausência |
+| Limite máximo nativo | 30 dias, independente da expiração |
+
+Exige médias de um minuto superiores a 85% por cinco minutos consecutivos. Um pico isolado ou uma média única de cinco minutos não são a regra. Isso não garante que todas as amostras instantâneas estiveram acima de 85%. Event flow acompanha a coleta atual de 30 s; transporte, fechamento de janela e avaliação acrescentam atraso, sem promessa de e-mail imediato.
+
+Working set ausente ou denominador ausente/inválido não produz percentual válido, não vira zero e não conta como minuto saudável. Não preencher lacunas para manter ou encerrar artificialmente a sequência. Pontos válidos abaixo do limiar podem encerrar pelo comportamento nativo. **Encerramento por expiração, fechamento manual ou limite máximo não comprova recuperação.** Ambiente desligado não abre alerta por falta de sinal.
+
+Kubeletstats continua cobrindo somente o nó onde o Collector executa; a existência de alocáveis de outros nós não produz uso/percentual para eles. Nós transitórios ou expansão permanente não ganham cobertura automaticamente. Não interpretar ausência de alerta como ausência de saturação em nós sem coleta.
+
+### Notificações e investigação
+
+Reutiliza o destino EMAIL existente e NEW_RELIC_ALERT_EMAIL, sem novo destinatário ou variável. Canal EMAIL/IINT e workflow New Relic próprios filtram o ID exato desta policy, notificam somente ACTIVATED/CLOSED e respeitam muting total/parcial. Sem novas regras de silenciamento, agendamentos ou correção automática.
+
+O e-mail inclui condição/ambiente, estado e links do incidente e do dashboard **Operação da API e Kubernetes**. Identificar o nó pela faceta k8s.node.name no incidente; selecionar o mesmo ambiente/período e comparar working set médio com alocável de cada janela. Conferir pods, containers, reinícios e condição MemoryPressure. **Percentual elevado não comprova OOM nem MemoryPressure**; investigar essas condições separadamente, sem confundir uso do nó com request/limit de container. Não incluir dados de negócio ou mensagens originais de exceção.
+
+No encerramento, verificar se houve leituras abaixo do limiar, expiração, limite máximo ou fechamento manual. Ausência de sinal pode ser ambiente/coleta removidos ou falha de exportação; não declarar recuperação somente pelo fechamento. Não provocar pressão de memória, ampliar recursos ou alterar topologia/IAM automaticamente.
+
+### Publicação conjunta e validação
+
+Acrescenta **5 recursos**: uma policy, duas condições, um canal e um workflow New Relic. Com os três alertas anteriores ainda não publicados, são **21 criações esperadas neste estágio**, preservando os dashboards. As contagens das seções anteriores descrevem o momento de cada entrega. O mantenedor concluirá o quinto alerta antes do PR e da publicação conjunta.
+
+Outputs `node_memory_alert_policy_id` e `node_memory_alert_condition_ids` (hom/prd) entram no resumo de newrelic-provision sem destinatário. Preservados plano → aprovação → apply exclusivo do plano salvo e conferência sem segundo apply. Publicação da configuração independe de ambiente ativo; medição/disparo reais dependem de dados e etapa autorizada posterior.
+
+Conferência local concluída: Terraform 1.15.9 fmt/init sem backend/validate/grafo e validate no mesmo modo do CI sem valores TF_VAR, revisão de filtros/faceta/unidades e operador above 85/ALL por 300 s, actionlint 1.7.12 com ShellCheck 0.11.0 e renderização dos três JSONs. Os 27 arquivos conferidos por SHA-256 permaneceram idênticos, incluindo os três alertas anteriores, dashboards, Collector, provider/lockfile/backend e CI. Evidências locais ignoradas na API: `artifacts/newrelic-node-memory-alert/`. Não criar testes de telemetria, mocks, scripts, métricas sintéticas ou carga; validação local não comprova disparo/entrega no serviço.
+
+Após publicação conjunta, conferir condições, facetas, roteamento e plano sem diferenças. Com hom ativo, comparar percentual com working set/alocável do mesmo nó e período. Comprovação de sustentação do limiar, disparo e recebimento requer etapa autorizada própria; não provocar pressão de memória nesta implementação. **Configuração preparada localmente; publicação e comprovação operacional continuam pendentes, E5 parcial.** O alerta de disponibilidade será outra entrega.
+
+## Alerta de API sem réplica disponível
+
+**19/10/2026 — Quinto alerta implementado e validado localmente, sem publicação ou indisponibilidade induzida.** Policy **Mecânica — API sem réplica disponível**, PER_CONDITION, com condições estáticas habilitadas hom/prd. Fonte exclusiva: k8s.deployment.available do Deployment default/deploy-gerenciamento-api no cluster do ambiente. Não há alteração de aplicações, HPA, Collector ou recursos AWS.
+
+### Consulta e avaliação
+
+`api-availability-alerts.tf` usa a consulta abaixo; prd substitui ambiente e cluster pelos correspondentes. Sem FACET, pois a consulta já seleciona um único Deployment por condição; não somar outros Deployments, pods, versões ou amostras:
+
+```sql
+SELECT max(`k8s.deployment.available`)
+FROM Metric
+WHERE metricName = 'k8s.deployment.available'
+  AND `deployment.environment.name` = 'hom'
+  AND `k8s.cluster.name` = 'mecanica-hom-eks'
+  AND `k8s.namespace.name` = 'default'
+  AND `k8s.deployment.name` = 'deploy-gerenciamento-api'
+```
+
+O máximo em cada janela de um minuto evita classificar como totalmente sem réplicas uma janela que contenha qualquer amostra de pelo menos uma réplica disponível. Não usar average/latest/min nem filtrar a consulta por valor zero antes da agregação: isso mudaria o tratamento de uma recuperação dentro da janela. Réplicas desejadas não são filtro; escala intencional para zero também pode disparar, conforme decisão do mantenedor. Logs, spans, códigos HTTP e volume de requisições não substituem esta métrica.
+
+| Configuração | Valor |
+|---|---|
+| Severidade | Critical; sem Warning |
+| Operador/limiar | below, 1; uma réplica disponível não viola |
+| Agregação | Janela de 60 s, event_flow, atraso de 60 s |
+| Avaliação | threshold_duration=120, ALL; sem janela deslizante |
+| Lacunas | fill_option=none; sem preencher ausência com zero/último valor |
+| Expiração | 600 s sem pontos |
+| Ao expirar | Encerrar incidentes existentes, sem abrir por ausência |
+| Limite máximo nativo | 30 dias, independente da expiração |
+
+Exige duas janelas consecutivas cujo máximo observado seja zero, não uma amostra isolada. A coleta periódica de 30 s não comprova o estado em todos os instantes entre amostras. Transporte, fechamento de janela e avaliação acrescentam atraso: não prometer e-mail exatamente dois minutos após a primeira falha.
+
+**Ausência de métrica não é zero.** Se o Deployment, cluster ou Collector forem removidos, ou a exportação parar, este alerta não detectará necessariamente a indisponibilidade. Sem preenchimento artificial, uma janela ausente não é janela saudável nem medição de zero. Um incidente existente poderá encerrar por expiração; isso, fechamento manual ou limite máximo não comprova recuperação. Pontos válidos fora do limiar podem encerrar conforme as regras nativas. Uma réplica disponível não comprova funcionamento ponta a ponta da API/Gateway/banco.
+
+### Notificação, manutenção e investigação
+
+Reutiliza o destino EMAIL e NEW_RELIC_ALERT_EMAIL existentes. Canal EMAIL/IINT e workflow New Relic próprios filtram o ID exato da policy, notificam ACTIVATED/CLOSED e respeitam muting total/parcial. Outputs api_availability_alert_policy_id e api_availability_alert_condition_ids (hom/prd) entram no resumo de newrelic-provision sem expor o destinatário. Sem novos inputs, variáveis, workflows GitHub, regras de silenciamento ou recuperação automática.
+
+O e-mail inclui condição/ambiente, estado e links do incidente e dashboard **Operação da API e Kubernetes**. Conferir o Deployment exato, réplicas desejadas/disponíveis, estado dos pods, readiness, reinícios e eventos no mesmo ambiente/período. Investigar o problema antes de alterar recursos; o alerta não executa restart, escala ou reparo. Não enviar dados de negócio, credenciais ou mensagens originais de exceção nos diagnósticos.
+
+Durante manutenção planejada, o mantenedor deverá silenciar manualmente as notificações no New Relic antes da intervenção e reativá-las ao encerrar a manutenção. Não desabilitar condições ou alterar réplicas para implementar o alerta; silenciamento pode suprimir notificação sem impedir a detecção/criação do incidente. Não criar agenda ou vincular execução de destroy/deploy a esse controle nesta entrega. Sem silenciamento, zero intencional por dois minutos pode gerar incidente/e-mail.
+
+### Validação e comprovação posterior
+
+Validações locais aprovadas: Terraform 1.15.9 fmt/init sem backend/validate/grafo e validate como CI sem valores TF_VAR, revisão estrutural de filtros/max/below 1/ALL por 120 s, ausência de filtro por desejadas e de preenchimento. Actionlint 1.7.12 com ShellCheck 0.11.0 e renderização dos três JSONs aprovados. Os 28 arquivos do baseline permaneceram idênticos por SHA-256, incluindo quatro alertas anteriores, templates, recursos dos dashboards, Collector, provider/lockfile/backend, variáveis e CI. Evidências locais ignoradas na API: `artifacts/newrelic-api-availability-alert/`. Não criar suíte de telemetria, mocks, scripts, métricas sintéticas ou indisponibilidade real. A conferência local não comprova aceitação remota da NRQL, disparo ou entrega.
+
+Após publicação conjunta, conferir condições, roteamento, silenciamentos e plano sem diferenças. Em etapa separada autorizada com hom ativo, comprovar zero réplicas → métrica → incidente → e-mail, depois restaurar a configuração operacional e conferir encerramento. Qualquer intervenção deverá considerar o HPA existente; não escalá-lo ou alterar suas regras automaticamente como parte desta implementação. Ausência por exclusão do Deployment não será aceita como prova da condição de zero réplicas. Publicação/disparo/recebimento e disponibilidade real permanecem pendentes, E5 parcial.
+
+## Cinco alertas — consolidação e publicação
+
+Os cinco alertas estão definidos localmente, cada um com policy/canal/workflow New Relic próprios e condições hom/prd, compartilhando um único destino de e-mail. Os registros anteriores de contagens/preparação permanecem históricos; esta seção consolida a sequência atual.
+
+| Alerta | Regra Critical | Dashboard para investigação |
+|---|---|---|
+| Falha técnica de processamento de OS | Soma >=1 em 300 s, event_timer 60 s, AT_LEAST_ONCE | Ordens de serviço |
+| Falha de notificação de OS | Soma de outcome=failure >=1 em 300 s, event_timer 60 s, AT_LEAST_ONCE | Integrações e autenticação |
+| CPU elevada do nó | CPU média usada / alocável >80%, janelas de 60 s/event_flow, ALL por 300 s, por nó | Operação da API e Kubernetes |
+| Memória elevada do nó | Working set médio / alocável >85%, janelas de 60 s/event_flow, ALL por 300 s, por nó | Operação da API e Kubernetes |
+| API sem réplica disponível | Máximo de réplicas disponíveis <1, janelas de 60 s/event_flow, ALL por 120 s | Operação da API e Kubernetes |
+
+Todos usam fill_option=none; expiração de 600 s fecha incidentes sem abrir por ausência, com limite máximo nativo de 30 dias. Somente ACTIVATED/CLOSED; respeitar muting. Silêncio/encerramento não provam recuperação. Destinatário por NEW_RELIC_ALERT_EMAIL já cadastrada, sem endereço pessoal versionado ou no resumo; o valor sensível continua presente no estado/plano binário protegidos. Cada runbook documenta sua interpretação e seus limites.
+
+1. Com a implementação dos cinco concluída, o mantenedor publica o PR e promove à main. O assistente não cria PR/commit ou executa publicação automaticamente.
+2. Executar **newrelic-provision** e revisar o plano salvo completo: esperado **26 recursos novos** — cinco policies, dez condições, um destino, cinco canais e cinco workflows New Relic — preservando os três dashboards. Não há recursos AWS nesta unidade. Se houver estado/configuração divergente, revisar antes de aprovar, sem forçar a contagem.
+3. Aprovar e aplicar exclusivamente o plano salvo; o workflow mantém o SHA, artefato e backend existentes. Conferência posterior deve terminar sem diferenças, sem segundo apply.
+4. Conferir no New Relic as dez condições habilitadas, cinco policies, filtros de roteamento, destinatário, confirmações exigidas pelo serviço, gatilhos, muting e links de investigação. Não enviar mensagens de teste automaticamente.
+5. Planejar e autorizar separadamente as comprovações reais em hom: gerar sinais controlados, verificar incidentes/e-mails e encerramento, preservando/restaurando a operação. Não provocar falhas, carga, pressão de memória ou indisponibilidade durante esta implementação.
+
+Não é necessário subir API/Lambda/banco/Gateway para publicar a configuração. Não confundir os e-mails de alerta do New Relic com notificações simuladas da API. **Cinco alertas preparados localmente; publicação e comprovação operacional pendentes, E5 parcial.**
