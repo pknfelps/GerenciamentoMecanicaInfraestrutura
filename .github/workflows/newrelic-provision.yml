@@ -72,11 +72,16 @@ jobs:
       - name: Create saved plan
         env:
           TF_VAR_new_relic_account_id: ${{ steps.configuration.outputs.account_id }}
+          TF_VAR_new_relic_alert_email: ${{ vars.NEW_RELIC_ALERT_EMAIL }}
           NEW_RELIC_API_KEY: ${{ secrets.NEW_RELIC_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "$NEW_RELIC_API_KEY" ]; then
             echo '::error::Cadastre NEW_RELIC_API_KEY no Environment newrelic.'
+            exit 1
+          fi
+          if [ -z "$TF_VAR_new_relic_alert_email" ]; then
+            echo '::error::Cadastre NEW_RELIC_ALERT_EMAIL no Environment newrelic.'
             exit 1
           fi
           terraform plan -out=tfplan -no-color -lock-timeout=60s
@@ -157,7 +162,7 @@ jobs:
           test -n "$NEW_RELIC_API_KEY"
           test -f tfplan
           terraform apply -no-color -lock-timeout=60s tfplan
-      - name: Show dashboard identifiers and links
+      - name: Show dashboard and alert identifiers
         run: |
           set -euo pipefail
           {
@@ -168,9 +173,25 @@ jobs:
               permalink="$(terraform output -raw "${dashboard}_dashboard_permalink")"
               printf -- '- %s: %s; %s\n' "$dashboard" "$guid" "$permalink"
             done
+            policy_id="$(terraform output -raw orders_processing_alert_policy_id)"
+            printf -- '- Policy de falha tecnica de OS: %s\n' "$policy_id"
+            terraform output -json orders_processing_alert_condition_ids | jq -r 'to_entries[] | "- Condicao OS \(.key): \(.value)"'
+            policy_id="$(terraform output -raw orders_notifications_alert_policy_id)"
+            printf -- '- Policy de falha de notificacao de OS: %s\n' "$policy_id"
+            terraform output -json orders_notifications_alert_condition_ids | jq -r 'to_entries[] | "- Condicao notificacao OS \(.key): \(.value)"'
+            policy_id="$(terraform output -raw node_cpu_alert_policy_id)"
+            printf -- '- Policy de CPU elevada do no sobre CPU alocavel: %s\n' "$policy_id"
+            terraform output -json node_cpu_alert_condition_ids | jq -r 'to_entries[] | "- Condicao CPU alocavel \(.key): \(.value)"'
+            policy_id="$(terraform output -raw node_memory_alert_policy_id)"
+            printf -- '- Policy de memoria elevada do no sobre memoria alocavel: %s\n' "$policy_id"
+            terraform output -json node_memory_alert_condition_ids | jq -r 'to_entries[] | "- Condicao memoria alocavel \(.key): \(.value)"'
+            policy_id="$(terraform output -raw api_availability_alert_policy_id)"
+            printf -- '- Policy de API sem replica disponivel: %s\n' "$policy_id"
+            terraform output -json api_availability_alert_condition_ids | jq -r 'to_entries[] | "- Condicao disponibilidade API \(.key): \(.value)"'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Check for remaining changes
         env:
+          TF_VAR_new_relic_alert_email: ${{ vars.NEW_RELIC_ALERT_EMAIL }}
           NEW_RELIC_API_KEY: ${{ secrets.NEW_RELIC_API_KEY }}
         run: |
           set -euo pipefail
