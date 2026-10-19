@@ -182,6 +182,9 @@ jobs:
             policy_id="$(terraform output -raw node_cpu_alert_policy_id)"
             printf -- '- Policy de CPU elevada do no sobre CPU alocavel: %s\n' "$policy_id"
             terraform output -json node_cpu_alert_condition_ids | jq -r 'to_entries[] | "- Condicao CPU alocavel \(.key): \(.value)"'
+            policy_id="$(terraform output -raw node_memory_alert_policy_id)"
+            printf -- '- Policy de memoria elevada do no sobre memoria alocavel: %s\n' "$policy_id"
+            terraform output -json node_memory_alert_condition_ids | jq -r 'to_entries[] | "- Condicao memoria alocavel \(.key): \(.value)"'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Check for remaining changes
         env:
