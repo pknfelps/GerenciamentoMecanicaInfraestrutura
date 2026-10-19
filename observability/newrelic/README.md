@@ -2,7 +2,7 @@
 
 Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica — Operação da API e Kubernetes**, uma página com 20 painéis de consulta e dois blocos de orientação. Fonte: `dashboards/operations.json.tftpl`; recurso `newrelic_one_dashboard_json.operations`. Acrescenta **Mecânica — Ordens de serviço**, uma página com 15 consultas e dois blocos de orientação, em `dashboards/orders.json.tftpl`/`newrelic_one_dashboard_json.orders`. Acrescenta **Mecânica — Integrações e autenticação**, uma página com 24 consultas/dois textos, em `dashboards/integrations.json.tftpl`/`newrelic_one_dashboard_json.integrations`. Cada dashboard tem seu próprio filtro hom/prd.
 
-**Estado da entrega:** definição e consultas históricas validadas em 18/10/2026. Dashboards ainda não publicados; plano remoto, apply e conferência visual dependem de autorização posterior. O workflow manual `newrelic-provision`, somente main, está preparado: plan → aprovação → apply do plano salvo. CI valida/renderiza esta unidade sem credenciais reais. Bootstrap/Environments/Secret e execução remota ainda pendentes.
+**Estado da entrega:** os três dashboards foram publicados em 18/10/2026 pelo `newrelic-provision`, com plan/aprovação/apply e conferência final sem diferenças ([execução 39163312655](https://github.com/pknfelps/GerenciamentoMecanicaInfraestrutura/actions/runs/39163312655)). Bootstrap, Environments e Secret foram configurados; os principais resultados históricos e filtros foram conferidos na interface. Em 19/10/2026, a investigação abaixo identificou facetas vazias nas consultas Kubernetes e validou a seleção explícita de métricas. Este ajuste está preparado localmente; sua publicação exige nova execução do workflow após o PR. Os registros de preparação abaixo preservam as evidências de cada etapa e não substituem este estado atual.
 
 ## Identidade, propriedade e estado
 
@@ -163,6 +163,20 @@ Consultas executadas pela sessão do navegador na conta 8626152, sem chave admin
 - Sem gráficos com dados de hom ao selecionar prd. Não se realizou criação, alteração de dashboard, plano remoto, apply, chamadas à API, reinício do Collector ou provisionamento AWS.
 
 A validação local usa o schema HCL do provider, JSON renderizado e revisão dos campos contra os tipos/exemplos do cliente oficial. A validação final do serviço para o documento, as permissões reais e o layout visual só será concluída no apply/conferência posterior. Evidências locais ignoradas no repositório da API: `artifacts/newrelic-operations/`.
+
+## Ajuste das consultas Kubernetes — 19/10/2026
+
+Os painéis Kubernetes restringem `metricName` às métricas utilizadas em cada consulta, além do ambiente e do cluster. O filtro evita que métricas de outros níveis (por exemplo, réplicas de Deployment, sem identificação de pod/container) produzam facetas vazias nos painéis de memória. Preservados os cálculos, as facetas de identidade, as unidades e os valores legitimamente ausentes de requests/limits; não há substituição de nulos por zero nem alteração de coleta.
+
+Comparação pela sessão New Relic, com os dados históricos de **18/10/2026 15:40–16:10 UTC**, sem subir o ambiente:
+
+- Memória dos pods: 13 facetas na consulta original; nove com a métrica explicitamente selecionada. Removidas quatro facetas sem medição; os nove conjuntos de identidade/valores permaneceram exatamente iguais.
+- Memória dos containers: 24 facetas originais, 14 totalmente vazias; dez após selecionar working set, request e limit. Todas as dez medições válidas foram preservadas exatamente, sem identidades incompletas. Requests/limits não definidos continuam ausentes.
+- Condições/uptime: o aviso de expressões incompatíveis em prd sem dados foi substituído por uma informação de conversão interna para o formato legado. A consulta continua sem facetas em prd; não se afirma ausência de todas as mensagens do serviço. Hom preservou Ready=1, pressões=0 e uptime=5673 segundos.
+
+A evidência aponta para seleção de métricas na consulta; não comprovou falha de enriquecimento do Collector. Referência do comportamento de compatibilidade: [métricas dimensionais e formato legado](https://docs.newrelic.com/docs/nrql/using-nrql/query-infrastructure-dimensional-metrics-nrql/).
+
+A seleção foi estendida aos dez painéis Kubernetes que ainda não tinham filtro explícito. O painel de última amostra Kubernetes já selecionava sua métrica. Não alterados os painéis HTTP/.NET, os dashboards de ordens/integrações, os Collectors, recursos AWS ou workflows. Publicar pelo `newrelic-provision`: esperar somente atualização do dashboard de operação, preservando os outros dois e sem criar/excluir dashboards. Não é necessário subir API, Lambda, banco, Gateway ou Collector.
 
 ## Ordens de serviço — painéis e semântica
 
