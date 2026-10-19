@@ -27,3 +27,13 @@ output "integrations_dashboard_permalink" {
   description = "Link do dashboard de integrações e autenticação no New Relic."
   value       = newrelic_one_dashboard_json.integrations.permalink
 }
+
+output "orders_processing_alert_policy_id" {
+  description = "ID da policy de falhas técnicas de processamento de OS."
+  value       = newrelic_alert_policy.orders_processing.id
+}
+
+output "orders_processing_alert_condition_ids" {
+  description = "IDs das condições de falha técnica de OS por ambiente."
+  value       = { for environment, condition in newrelic_nrql_alert_condition.orders_processing : environment => condition.id }
+}

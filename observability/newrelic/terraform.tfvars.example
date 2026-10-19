@@ -1,1 +1,2 @@
 new_relic_account_id = 8626152
+new_relic_alert_email = "alerts@example.invalid"

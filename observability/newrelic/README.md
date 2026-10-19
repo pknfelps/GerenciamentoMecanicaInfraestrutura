@@ -1,8 +1,8 @@
-# Dashboards persistentes — New Relic
+# Dashboards e alertas persistentes — New Relic
 
 Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica — Operação da API e Kubernetes**, uma página com 20 painéis de consulta e dois blocos de orientação. Fonte: `dashboards/operations.json.tftpl`; recurso `newrelic_one_dashboard_json.operations`. Acrescenta **Mecânica — Ordens de serviço**, uma página com 15 consultas e dois blocos de orientação, em `dashboards/orders.json.tftpl`/`newrelic_one_dashboard_json.orders`. Acrescenta **Mecânica — Integrações e autenticação**, uma página com 24 consultas/dois textos, em `dashboards/integrations.json.tftpl`/`newrelic_one_dashboard_json.integrations`. Cada dashboard tem seu próprio filtro hom/prd.
 
-**Estado da entrega:** os três dashboards foram publicados em 18/10/2026 pelo `newrelic-provision`, com plan/aprovação/apply e conferência final sem diferenças ([execução 39163312655](https://github.com/pknfelps/GerenciamentoMecanicaInfraestrutura/actions/runs/39163312655)). Bootstrap, Environments e Secret foram configurados; os principais resultados históricos e filtros foram conferidos na interface. Em 19/10/2026, a investigação abaixo identificou facetas vazias nas consultas Kubernetes e validou a seleção explícita de métricas. Este ajuste está preparado localmente; sua publicação exige nova execução do workflow após o PR. Os registros de preparação abaixo preservam as evidências de cada etapa e não substituem este estado atual.
+**Estado da entrega:** os três dashboards foram publicados e conferidos; a correção de facetas Kubernetes foi publicada pela [execução 39303143995](https://github.com/pknfelps/GerenciamentoMecanicaInfraestrutura/actions/runs/39303143995), com conferência posterior sem diferenças. Em 19/10/2026, o alerta de falha técnica de OS foi implementado e validado localmente; sua publicação exige cadastrar NEW_RELIC_ALERT_EMAIL e executar novamente o workflow após o PR. Disparo e recebimento reais continuam pendentes. Os registros históricos abaixo preservam as evidências de preparação e não substituem este estado atual.
 
 ## Identidade, propriedade e estado
 
@@ -12,14 +12,14 @@ Unidade Terraform independente da base, Gateway e bootstrap. Define **Mecânica 
 - Permissão `PUBLIC_READ_ONLY`: leitura pelos usuários autorizados da conta; edição pelo proprietário. Não configura acesso público pela internet, links públicos ou compartilhamento externo.
 - Backend S3 existente `mecanica-tfstate-121754142617-us-east-1`, chave `shared/newrelic/terraform.tfstate`, região us-east-1, criptografia e lockfile nativo. Somente workspace default. Nenhuma leitura de estados externos.
 - Os três dashboards têm `prevent_destroy=true`. Os destroys AWS não alcançam esta unidade. Não executar destroy, remover proteção ou apagar o objeto de estado como parte do descarte de hom/prd.
-- Todos os mantenedores usam o mesmo backend/Account ID. Não inicializar estados locais paralelos para publicar cópias. GUID e permalink são os únicos outputs.
+- Todos os mantenedores usam o mesmo backend/Account ID. Não inicializar estados locais paralelos para publicar cópias. Outputs contêm GUID/permalink dos dashboards e IDs da policy/condições de processamento de OS; não expõem o destinatário.
 - Mudanças seguem PR e plano salvo. Edição manual no console causa divergência; refletir a mudança no template ou revisar o próximo plano antes de aplicar. Não importar exports com GUIDs/IDs de páginas/widgets como fonte de uma criação nova.
 
 ## Credenciais
 
-A **User API Key** administra dashboards e é diferente da **Ingest - License Key**, usada pelos Collectors para enviar telemetria. Esta unidade não lê o Secret de ingestão nem modifica IAM/Secrets Manager.
+A **User API Key** administra os recursos desta unidade (dashboards, policy/condições e notificações) e é diferente da **Ingest - License Key**, usada pelos Collectors para enviar telemetria. Esta unidade não lê o Secret de ingestão nem modifica IAM/Secrets Manager.
 
-O mantenedor deve obter uma User API Key de um usuário autorizado a criar/atualizar dashboards na conta escolhida. Cadastrar no GitHub como Secret `NEW_RELIC_API_KEY` do Environment `newrelic`; em operação local alternativa, fornecer somente ao processo por essa variável. Não enviar a chave no chat, versionar, colocar em tfvars/backend, usar `-var`, imprimir o ambiente ou ativar `TF_LOG` durante operações autenticadas.
+O mantenedor deve obter uma User API Key de um usuário autorizado a criar/atualizar dashboards, alertas e componentes de notificação na conta escolhida. Cadastrar no GitHub como Secret `NEW_RELIC_API_KEY` do Environment `newrelic`; em operação local alternativa, fornecer somente ao processo por essa variável. Não enviar a chave no chat, versionar, colocar em tfvars/backend, usar `-var`, imprimir o ambiente ou ativar `TF_LOG` durante operações autenticadas.
 
 A autenticação AWS é usada somente pelo backend S3, com a cadeia padrão de credenciais local e acesso ao objeto de estado/lock. Não há provider AWS nesta unidade. O workflow usa a role dedicada `mecanica-newrelic-github`, declarada no bootstrap, exclusivamente para estado/lock; a alternativa local usa a identidade autorizada do mantenedor. Se o perfil escolhido não tiver acesso, interromper e revisar a identidade; não alterar policies automaticamente.
 
@@ -63,7 +63,7 @@ Workflow [.github/workflows/newrelic-provision.yml](../../.github/workflows/newr
 
 | Environment | Configuração |
 |---|---|
-| `newrelic` | Branch main somente, sem tags. Variável `AWS_NEW_RELIC_ROLE_ARN` com o output do bootstrap; variável `NEW_RELIC_ACCOUNT_ID=8626152`; Secret `NEW_RELIC_API_KEY` com uma User API Key autorizada a administrar os dashboards |
+| `newrelic` | Branch main somente, sem tags. Variável `AWS_NEW_RELIC_ROLE_ARN` com o output do bootstrap; variável `NEW_RELIC_ACCOUNT_ID=8626152`; variável `NEW_RELIC_ALERT_EMAIL` com o destinatário escolhido; Secret `NEW_RELIC_API_KEY` com uma User API Key autorizada a administrar dashboards, alertas e notificações |
 | `newrelic-approval` | Branch main somente, sem tags; reviewer `pknfelps`, autorrevisão permitida. Não cadastrar credenciais, secrets ou variáveis AWS/New Relic |
 
 Usar usuário autorizado também a editar os dashboards já existentes; permissões PUBLIC_READ_ONLY não dão edição a todos os usuários. A chave deve ser cadastrada pelo mantenedor diretamente no GitHub, sem enviá-la no chat. Não usar License Key de ingestão, AWS Secrets Manager ou tfvars para essa credencial. Não cadastrar cópias desnecessárias da User API Key como repository/organization secret: este workflow espera a credencial no Environment `newrelic`.
@@ -71,7 +71,7 @@ Usar usuário autorizado também a editar os dashboards já existentes; permiss�
 ### Plano, aprovação e aplicação
 
 - **plan:** checkout do SHA exato da execução; checks de repositório/main/configuração; OIDC para conta 121754142617/us-east-1; Terraform 1.15.9, provider/lockfile existentes, workspace default e backend.hcl. Init com lockfile readonly, fmt/validate e `plan -out=tfplan -lock-timeout=60s`. A conta positiva validada fica registrada como output do job, usada pelo plano e pelo apply/conferência, mesmo se a variável do Environment mudar durante a aprovação.
-- O plano binário e `tfplan.txt` são os únicos arquivos enviados pelo upload-artifact, retidos por sete dias. Revisar o texto/commit/Account ID antes de aprovar. Sem dashboards anteriores, esperar três criações; os existentes não devem mudar nesta primeira publicação do workflow. O artefato contém configuração/estado planejado; não publicar externamente nem incluir .terraform, credenciais ou tfvars no upload.
+- O plano binário e `tfplan.txt` são os únicos arquivos enviados pelo upload-artifact, retidos por sete dias. Revisar o texto/commit/Account ID antes de aprovar. Nesta entrega, esperar seis recursos de alerta novos e preservar os três dashboards existentes. Se o estado estiver inesperadamente vazio ou houver outras diferenças, revisar antes de aprovar. O artefato contém configuração/estado planejado; não publicar externamente nem incluir .terraform, credenciais ou tfvars no upload.
 - **approval:** Environment `newrelic-approval`, `permissions: {}`, sem checkout, autenticação AWS, User API Key ou acesso aos artefatos pelo job. A revisão é feita pelo mantenedor no plano do job anterior.
 - **apply:** checkout do mesmo SHA, autenticação nova e download pelo ID retornado pelo plan desta execução; init readonly e `terraform apply ... tfplan`. Não recria o plano antes do apply. Resumo com commit, Account ID e GUIDs/permalinks dos três dashboards.
 - Conferência posterior executa `plan -detailed-exitcode`, sem salvar/aplicar outro plano: 0 confirma ausência de diferenças; 2 falha com diagnóstico de divergência; demais erros também falham. Não há rollback/reparo automático.
@@ -99,6 +99,7 @@ Não é necessário subir API, Lambda, banco ou Gateway para publicar o dashboar
 ```powershell
 $env:NEW_RELIC_API_KEY = Read-Host 'New Relic User API Key' -MaskInput
 Copy-Item terraform.tfvars.example terraform.tfvars
+# Preencher new_relic_alert_email no terraform.tfvars local antes do plan.
 terraform init -backend-config=backend.hcl -input=false -lockfile=readonly
 terraform workspace show
 terraform plan -var-file=terraform.tfvars -out=tfplan
@@ -293,3 +294,54 @@ fmt/init sem backend/validate e renderização Terraform aprovados. JSON, grade 
 - [NRQL: agrupamento por data e fuso horário](https://docs.newrelic.com/docs/nrql/nrql-references/nrql-group-results-across-time/)
 
 - [Métricas Lambda: Errors, Invocations, Throttles e Duration](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html)
+
+## Alerta de processamento de OS
+
+**19/10/2026 — Implementado e validado localmente, sem publicação ou envio de e-mail.** Somente o alerta de falha técnica de OS; os demais quatro alertas previstos continuam separados. Nenhuma alteração de instrumentação, Collector, IAM ou infraestrutura AWS.
+
+### Fonte e avaliação
+
+`orders-alerts.tf` acrescenta uma policy com `PER_CONDITION` e duas condições habilitadas, uma para hom e outra para prd. Cada consulta soma `mecanica.orders.processing.failures`, restringindo explicitamente `metricName`, `service.name=mecanica-api` e o ambiente. Todas as operações, réplicas e versões participam da soma; não há FACET, taxa, denominador, filtro por pod/commit ou contagem por logs/spans. A API já conta uma falha por resposta 500 de ação de OS, excluindo cancelamento pelo cliente e respostas 400/401/403/404/409/422.
+
+| Configuração | Valor |
+|---|---|
+| Severidade | Critical; sem Warning |
+| Limiar | Soma >= 1 |
+| Janela | 300 segundos, sem sobreposição |
+| Fechamento da janela | event_timer, temporizador de 60 segundos |
+| Avaliação do limiar | threshold_duration=300, AT_LEAST_ONCE |
+| Lacunas | fill_option=none, sem preencher com zero/último valor |
+| Expiração | 600 segundos sem pontos recebidos para o sinal |
+| Na expiração | Encerrar incidentes; não abrir incidente por ausência |
+
+Uma falha isolada pode disparar, sem exigir falhas contínuas por cinco minutos. Coleta, transporte, fechamento da janela e avaliação acrescentam atraso; o temporizador não é promessa de entrega do e-mail em 60 segundos. As condições são de streaming: não reprocessam a janela histórica dos dashboards.
+
+Uma medição real abaixo do limiar pode encerrar o incidente pelas regras nativas. **Encerramento por dez minutos sem pontos indica ausência de sinal, não recuperação comprovada da API.** Depois de desligar o ambiente, ausência de pontos não abre um novo incidente. Um incidente já aberto pode encerrar por expiração e enviar sua notificação de encerramento. A plataforma exige um limite máximo de duração do incidente: configurado o máximo nativo de 30 dias, independente da expiração de dez minutos. Fechamento manual ou por esse limite também não comprova recuperação.
+
+### E-mail e isolamento
+
+A variável obrigatória `new_relic_alert_email`, marcada como sensível, recebe o destinatário por `NEW_RELIC_ALERT_EMAIL` no Environment GitHub `newrelic`. O mantenedor deve cadastrar ali o endereço que escolheu para os alertas; nenhum endereço pessoal foi versionado. O exemplo usa `alerts@example.invalid`, apenas para validação, e deve ser substituído antes de qualquer publicação local. O destino `mecanica-alertas-email` poderá ser reutilizado pelas próximas entregas.
+
+O valor fica oculto no plano textual e não é output/resumo. Isso não o remove do plano binário/estado Terraform: ambos devem continuar protegidos no backend/artefato existentes. A User API Key continua somente em `NEW_RELIC_API_KEY`; não reutilizar License Key, alterar IAM ou ampliar acesso automaticamente se a conta/usuário não puder administrar alertas/notificações.
+
+O canal EMAIL/IINT inclui estado, nome da condição (com ambiente), link do incidente e dashboard de ordens. Não acrescenta dados pessoais de clientes, payloads, documentos, tokens, credenciais ou mensagens de exceção. O workflow **de notificações New Relic** filtra somente o ID desta policy, avisa apenas ACTIVATED/CLOSED e respeita silenciamento total/parcial. Não há novo workflow GitHub, agendamento ou regra de muting. Condições e incidentes são separados por ambiente.
+
+### Publicação
+
+1. Cadastrar `NEW_RELIC_ALERT_EMAIL` no Environment `newrelic`, mantendo a mesma User API Key e as demais variáveis. Não cadastrar credenciais no `newrelic-approval`.
+2. Publicar a alteração na main pelo fluxo de PR e executar `newrelic-provision`.
+3. Revisar o plano completo: esperado **6 recursos novos**, uma policy, duas condições, um destino, um canal e um workflow New Relic. Dashboards e recursos AWS não devem mudar. Revisar diferenças inesperadas antes de aprovar.
+4. Aprovar e aplicar exclusivamente o plano salvo. O destinatário do apply é o congelado no plano. A conferência posterior usa o valor atual da variável do Environment; se ela mudar durante a aprovação, a divergência exigirá nova execução completa, sem segundo apply automático.
+5. Conferir resumo com IDs da policy e das condições, final sem diferenças, condições habilitadas, consulta/tempos, filtro da policy, muting e gatilhos de e-mail. Concluir confirmação de destinatário se exigida pelo serviço. Não disparar mensagem de teste sem autorização.
+
+O mesmo backend persistente conserva dashboards e alertas fora dos destroys AWS. Não é necessário subir API, Lambda, banco, Gateway ou Collector para publicar a configuração. O CI existente valida a unidade e mantém a renderização dos três dashboards sem credenciais reais; nenhuma suíte, script ou mock novo.
+
+### Investigação e comprovação posterior
+
+Na abertura, identificar ambiente, condição e janela no incidente; consultar o dashboard de ordens no mesmo ambiente/período, somar as falhas e verificar a operação. Usar os logs sanitizados/correlação para investigar a causa; não reenviar conteúdo sensível. Não confundir falha de processamento com falha de notificação ou de medição após commit. No encerramento, conferir a causa: ausência de pontos exige verificar a saúde/coleta separadamente.
+
+Após publicação, em uma etapa autorizada com hom ativo: provocar uma falha controlada de ação de OS, confirmar resposta 500, incremento da métrica, incidente e recebimento do e-mail. Uma única falha deve bastar; negativas de negócio não devem disparar. Conferir que o incidente de hom não abre em prd, que não há notificação duplicada de abertura e que o encerramento após ausência do sinal não é apresentado como recuperação comprovada. Não criar endpoint de falhas, enviar métrica sintética ou causar indisponibilidade como parte desta implementação.
+
+Se pontos reais de valor zero continuarem chegando depois da falha, o cenário não é de ausência de sinal: registrar o fechamento normal e reservar a comprovação dos 600 segundos de silêncio para uma etapa controlada autorizada. Falha na entrega/ativação exige diagnóstico; não ampliar permissões ou repetir e-mails automaticamente.
+
+fmt/init sem backend/validate, renderização dos três JSONs, grafo Terraform e actionlint 1.7.12 com ShellCheck 0.11.0 aprovados localmente, com placeholders e sem acesso AWS/New Relic. Templates/provider/lockfile/backend/CI preservados por checksum. **E5.5 permanece parcial até o disparo e recebimento reais.**
