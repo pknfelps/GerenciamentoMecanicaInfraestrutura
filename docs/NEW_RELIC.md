@@ -212,3 +212,42 @@ Os cinco alertas estão definidos localmente: processamento de OS, notificação
 Validação local não comprova disparo/entrega; depois da publicação e de autorização específica com hom ativo, conferir zero medido → incidente → e-mail, restaurar operação e conferir encerramento. Não remover Deployment como substituto de zero réplicas, nem alterar HPA automaticamente. Sem tráfego, indisponibilidade, carga, pressão de memória, mensagem de teste ou operação remota durante a implementação. Aplicações, Collector e quatro alertas anteriores preservados; nenhuma suíte/mocks/scripts novos. Cinco alertas preparados, publicação e comprovação operacional pendentes, E5 parcial.
 
 Validação local dos cinco alertas aprovada: fmt/init sem backend/validate/grafo, validate como CI sem valores TF_VAR, renderização dos três JSONs e actionlint/ShellCheck. Revisão estrutural do quinto confirma filtros exatos, max/below 1/ALL por 120 s, sem desejadas ou lacunas preenchidas. Quatro alertas anteriores, dashboards, Collector, provider/lockfile/backend e CI preservados por SHA-256 (28 arquivos). Evidências em artifacts/newrelic-api-availability-alert/ na API; placeholders somente, nenhum plano remoto, apply, e-mail ou indisponibilidade real.
+
+
+## Acessos técnicos PostgreSQL, SSM e Secrets Manager — E5.8
+
+O dashboard de integrações recebe quatro painéis para mecanica.integrations.operations: última amostra por serviço/integração, operações concluídas, falhas/timeouts por operação e percentual de falhas. Reutiliza hom/prd, Account ID, estado persistente e o newrelic-provision. Operação/ordens e os cinco alertas permanecem intactos; publicação esperada altera somente o dashboard existente, sem recursos novos ou mudanças AWS.
+
+Contador Mecanica.Integrations produzido pela Infrastructure da API e da autenticação. Cada ponto representa um acesso técnico concluído: aquisição lógica de conexão (inclusive pool), chamada Dapper, begin/commit/rollback, GetParameters em lote ou GetSecretValue. AWS incorpora o resultado final das retentativas internas; não conta tentativas físicas. Configuração inválida após uma resposta válida não transforma aquela chamada em falha de transporte. Uma falha SQL pode resultar em conflito HTTP; não equivale necessariamente a HTTP 500 ou banco indisponível.
+
+Os painéis principais incluem purpose application/bootstrap e service.name mecanica-api/mecanica-auth. Percentual: (failure + timeout) / (success + failure + timeout), excluindo cancelamentos e mantendo nulo sem denominador. Readiness e consultas do histórico para telemetria ficam separados; cancelamentos originados no orçamento global da Lambda permanecem canceled neste contador, enquanto a métrica da invocação classifica o timeout do handler. Somente integration/operation/purpose/outcome de conjuntos definidos, sem SQL, ARNs, conteúdo de Secrets ou mensagens de exceção.
+
+API antecipa um único provider de métricas antes das chamadas AWS e o reutiliza no host, com encerramento nativo de até 3.000 ms. Lambda mantém provider e flush atuais. Nenhuma garantia de entrega em falha fatal, encerramento abrupto ou Collector indisponível; sem replay, persistência ou recuperação automática. A leitura da License Key pelo Collector não é medida pela aplicação. A implementação não cria instrumentação de SMTP na AWS nem alerta adicional.
+
+Consultas auxiliares de diagnóstico, substituindo o ambiente se necessário:
+
+```sql
+SELECT sum(`mecanica.integrations.operations`)
+FROM Metric
+WHERE metricName = 'mecanica.integrations.operations'
+  AND `service.name` IN ('mecanica-api', 'mecanica-auth')
+  AND `deployment.environment.name` = 'hom'
+  AND purpose IN ('readiness', 'telemetry')
+FACET `service.name`, integration, operation, purpose, outcome
+LIMIT 100
+```
+
+```sql
+SELECT sum(`mecanica.integrations.operations`)
+FROM Metric
+WHERE metricName = 'mecanica.integrations.operations'
+  AND `service.name` IN ('mecanica-api', 'mecanica-auth')
+  AND `deployment.environment.name` = 'hom'
+  AND outcome = 'canceled'
+FACET `service.name`, integration, operation, purpose
+LIMIT 100
+```
+
+Respeitar o seletor global nos widgets; consultas diretas podem usar a janela selecionada pelo Query Builder. Nenhum preenchimento de lacunas ou reconstrução de dados antigos. Após os PRs: api-deploy, auth-publish/provision e atualização do Gateway para a nova versão, publicação do dashboard e conferência de séries reais em hom. Campos prd sem dados não comprovam operação. Falhas controladas e comprovação dos cinco alertas dependem de autorização separada. E5.8 permanece parcial até validar os novos sinais no New Relic.
+
+**19/10/2026 — E5.8, validação local concluída:** 1.187 testes API e 245 testes Lambda na suíte completa, incluindo PostgreSQL/Testcontainers, zero falhas/ignorados. A pendência de Docker foi resolvida pelo mantenedor. Os quatro painéis das integrações continuam preparados localmente; publicação e comprovação dos novos sinais permanecem pendentes. Não houve execução remota de workflows, operação AWS ou publicação New Relic nesta conferência.

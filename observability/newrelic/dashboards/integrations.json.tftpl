@@ -13,19 +13,19 @@
             "row": 1,
             "column": 1,
             "width": 12,
-            "height": 4
+            "height": 6
           },
           "visualization": {
             "id": "viz.markdown"
           },
           "rawConfiguration": {
-            "text": "## Integrações e autenticação\nSelecione **hom** ou **prd** e o período global; sugestão: **60 minutos**. O filtro é de visualização, não de autorização. Última amostra histórica não comprova disponibilidade atual. Sem dados não equivale a zero ou ausência de falhas.\n**Autenticação OTLP:** 400/401 são negativas esperadas; falhas técnicas são timeout/technical-failure. O login interno separa 5xx de 4xx. Durações em **ms**; a medição do handler inclui inicialização tardia quando ocorre e termina antes do flush.\n**CloudWatch:** atraso de coleta de **dez minutos**, mais publicação/exportação. Cada ponto mostra a última estatística de **60 segundos** no bucket; concorrência mostra o maior Maximum. Não são totais do período nem latências ponderadas do intervalo. CPU RDS em **%**, memória livre em **MiB**; contagens não são taxas. O seletor pode incluir dados de recursos já removidos."
+            "text": "## Integrações e autenticação\nSelecione **hom** ou **prd** e o período global; sugestão: **60 minutos**. O filtro é de visualização, não de autorização. Última amostra histórica não comprova disponibilidade atual. Sem dados não equivale a zero ou ausência de falhas.\n**Autenticação OTLP:** 400/401 são negativas esperadas; falhas técnicas são timeout/technical-failure. O login interno separa 5xx de 4xx. Durações em **ms**; a medição do handler inclui inicialização tardia quando ocorre e termina antes do flush.\n**CloudWatch:** atraso de coleta de **dez minutos**, mais publicação/exportação. Cada ponto mostra a última estatística de **60 segundos** no bucket; concorrência mostra o maior Maximum. Não são totais do período nem latências ponderadas do intervalo. CPU RDS em **%**, memória livre em **MiB**; contagens não são taxas. O seletor pode incluir dados de recursos já removidos.\n**Acessos técnicos:** operações PostgreSQL, SSM e Secrets Manager concluídas na aplicação/inicialização. As chamadas AWS incluem o resultado final das retentativas do SDK. O percentual considera failure + timeout sobre success + failure + timeout, excluindo cancelamentos. Uma falha SQL não equivale necessariamente a HTTP 500 ou indisponibilidade. Probes e leituras de telemetria ficam fora destes painéis. Ausência de dados não comprova saúde; operações interrompidas abruptamente podem não ser registradas."
           }
         },
         {
           "title": "Última amostra da autenticação (UTC)",
           "layout": {
-            "row": 5,
+            "row": 7,
             "column": 1,
             "width": 4,
             "height": 3
@@ -45,7 +45,7 @@
         {
           "title": "Última amostra de notificações (UTC)",
           "layout": {
-            "row": 5,
+            "row": 7,
             "column": 5,
             "width": 4,
             "height": 3
@@ -65,7 +65,7 @@
         {
           "title": "Última amostra CloudWatch por serviço (UTC)",
           "layout": {
-            "row": 5,
+            "row": 7,
             "column": 9,
             "width": 4,
             "height": 3
@@ -85,7 +85,7 @@
         {
           "title": "Clientes — invocações concluídas",
           "layout": {
-            "row": 8,
+            "row": 10,
             "column": 1,
             "width": 4,
             "height": 3
@@ -105,7 +105,7 @@
         {
           "title": "Clientes — resultados por categoria",
           "layout": {
-            "row": 8,
+            "row": 10,
             "column": 5,
             "width": 4,
             "height": 3
@@ -125,7 +125,7 @@
         {
           "title": "Clientes — falhas técnicas (%)",
           "layout": {
-            "row": 8,
+            "row": 10,
             "column": 9,
             "width": 4,
             "height": 3
@@ -145,7 +145,7 @@
         {
           "title": "Clientes — duração do handler (ms)",
           "layout": {
-            "row": 11,
+            "row": 13,
             "column": 1,
             "width": 6,
             "height": 3
@@ -165,7 +165,7 @@
         {
           "title": "Clientes — evolução da duração (ms)",
           "layout": {
-            "row": 11,
+            "row": 13,
             "column": 7,
             "width": 6,
             "height": 3
@@ -185,7 +185,7 @@
         {
           "title": "Login interno — requisições por código HTTP",
           "layout": {
-            "row": 14,
+            "row": 16,
             "column": 1,
             "width": 4,
             "height": 3
@@ -205,7 +205,7 @@
         {
           "title": "Login interno — respostas 5xx (%)",
           "layout": {
-            "row": 14,
+            "row": 16,
             "column": 5,
             "width": 4,
             "height": 3
@@ -225,7 +225,7 @@
         {
           "title": "Login interno — duração (ms)",
           "layout": {
-            "row": 14,
+            "row": 16,
             "column": 9,
             "width": 4,
             "height": 3
@@ -245,7 +245,7 @@
         {
           "title": "Gateway — últimas contagens de 60 s por ponto",
           "layout": {
-            "row": 17,
+            "row": 19,
             "column": 1,
             "width": 6,
             "height": 3
@@ -265,7 +265,7 @@
         {
           "title": "Gateway — últimas latências médias de 60 s (ms)",
           "layout": {
-            "row": 17,
+            "row": 19,
             "column": 7,
             "width": 6,
             "height": 3
@@ -285,7 +285,7 @@
         {
           "title": "Lambda AWS — últimas contagens de 60 s por ponto",
           "layout": {
-            "row": 20,
+            "row": 22,
             "column": 1,
             "width": 4,
             "height": 3
@@ -305,7 +305,7 @@
         {
           "title": "Lambda AWS — última Duration média de 60 s (ms)",
           "layout": {
-            "row": 20,
+            "row": 22,
             "column": 5,
             "width": 4,
             "height": 3
@@ -325,7 +325,7 @@
         {
           "title": "Lambda AWS — maior concorrência por ponto",
           "layout": {
-            "row": 20,
+            "row": 22,
             "column": 9,
             "width": 4,
             "height": 3
@@ -345,7 +345,7 @@
         {
           "title": "RDS — última CPU média de 60 s (%)",
           "layout": {
-            "row": 23,
+            "row": 25,
             "column": 1,
             "width": 4,
             "height": 3
@@ -365,7 +365,7 @@
         {
           "title": "RDS — última memória livre média de 60 s (MiB)",
           "layout": {
-            "row": 23,
+            "row": 25,
             "column": 5,
             "width": 4,
             "height": 3
@@ -385,7 +385,7 @@
         {
           "title": "RDS — últimas conexões médias de 60 s",
           "layout": {
-            "row": 23,
+            "row": 25,
             "column": 9,
             "width": 4,
             "height": 3
@@ -405,7 +405,7 @@
         {
           "title": "Notificações — tentativas concluídas por tipo e modo",
           "layout": {
-            "row": 26,
+            "row": 28,
             "column": 1,
             "width": 4,
             "height": 3
@@ -425,7 +425,7 @@
         {
           "title": "Notificações — resultados por tipo e modo",
           "layout": {
-            "row": 26,
+            "row": 28,
             "column": 5,
             "width": 4,
             "height": 3
@@ -445,7 +445,7 @@
         {
           "title": "Notificações — falhas por tipo e modo (%)",
           "layout": {
-            "row": 26,
+            "row": 28,
             "column": 9,
             "width": 4,
             "height": 3
@@ -465,7 +465,7 @@
         {
           "title": "Diagnóstico — falhas da autenticação (até 100 logs)",
           "layout": {
-            "row": 29,
+            "row": 31,
             "column": 1,
             "width": 6,
             "height": 4
@@ -485,7 +485,7 @@
         {
           "title": "Diagnóstico — respostas 5xx do Gateway (até 100 logs)",
           "layout": {
-            "row": 29,
+            "row": 31,
             "column": 7,
             "width": 6,
             "height": 4
@@ -505,7 +505,7 @@
         {
           "title": "Limites e diferenças entre as fontes",
           "layout": {
-            "row": 33,
+            "row": 35,
             "column": 1,
             "width": 12,
             "height": 5
@@ -514,7 +514,87 @@
             "id": "viz.markdown"
           },
           "rawConfiguration": {
-            "text": "**Handler e plataforma Lambda são fontes diferentes:** uma resposta HTTP 500 tratada pode não aumentar AWS/Lambda Errors. Errors inclui exceções/runtime/timeouts; Throttles não entra em Invocations. A Duration AWS e o histograma do handler têm limites de medição diferentes. Os gráficos CloudWatch não somam médias nem calculam percentis sobre médias de minutos.\n**Notificações:** success em **simulated** indica apenas conclusão da simulação, sem entrega ao destinatário. Falhas de notificação são separadas da operação persistida.\n**Diagnóstico parcial:** access logs podem ter lacunas ou duplicações; a amostra histórica comprovou 19 de 28 request IDs, sem causa definitiva estabelecida. Tabelas limitadas não representam cobertura completa nem alimentam as taxas oficiais. IDs são técnicos; nenhum corpo bruto ou conteúdo de segmentos X-Ray é mostrado.\n**Cobertura pendente:** CPU/conexões RDS não são taxa de erros PostgreSQL. Não existem contadores completos por tentativa/falha de PostgreSQL, SSM ou Secrets Manager; contagem de spans não os substitui. A união automática de X-Ray/OTLP no New Relic permanece pendente.\nSomente sinais já coletados: sem reconstrução, preenchimento de lacunas ou garantia de entrega única. Contadores podem retornar zero sem séries; médias/percentuais sem denominador ficam ausentes. Períodos sem amostras não comprovam disponibilidade ou ausência de falhas."
+            "text": "**Handler e plataforma Lambda são fontes diferentes:** uma resposta HTTP 500 tratada pode não aumentar AWS/Lambda Errors. Errors inclui exceções/runtime/timeouts; Throttles não entra em Invocations. A Duration AWS e o histograma do handler têm limites de medição diferentes. Os gráficos CloudWatch não somam médias nem calculam percentis sobre médias de minutos.\n**Notificações:** success em **simulated** indica apenas conclusão da simulação, sem entrega ao destinatário. Falhas de notificação são separadas da operação persistida.\n**Diagnóstico parcial:** access logs podem ter lacunas ou duplicações; a amostra histórica comprovou 19 de 28 request IDs, sem causa definitiva estabelecida. Tabelas limitadas não representam cobertura completa nem alimentam as taxas oficiais. IDs são técnicos; nenhum corpo bruto ou conteúdo de segmentos X-Ray é mostrado.\n**Cobertura dos acessos técnicos:** o contador mecanica.integrations.operations mede acessos lógicos concluídos a PostgreSQL, SSM e Secrets Manager, com resultados separados. As retentativas internas do SDK integram uma única chamada lógica; não representam tentativas físicas separadas. Os painéis principais consideram application/bootstrap e excluem probes e leituras de telemetria. CPU/conexões RDS e contagem de spans não substituem esse contador. Instrumentação e validação local concluídas; a comprovação dos novos sinais implantados permanece pendente. A união automática de X-Ray/OTLP no New Relic também permanece pendente.\nSomente sinais já coletados: sem reconstrução, preenchimento de lacunas ou garantia de entrega única. Contadores podem retornar zero sem séries; médias/percentuais sem denominador ficam ausentes. Períodos sem amostras não comprovam disponibilidade ou ausência de falhas."
+          }
+        },
+        {
+          "title": "Última amostra das integrações (UTC)",
+          "layout": {
+            "row": 41,
+            "column": 1,
+            "width": 12,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT toDatetime(latest(timestamp), 'yyyy-MM-dd HH:mm:ss', timezone: 'UTC') AS 'Última amostra UTC' FROM Metric WHERE metricName = 'mecanica.integrations.operations' AND `service.name` IN ('mecanica-api', 'mecanica-auth') AND `deployment.environment.name` = {{environment}} AND integration IN ('postgresql', 'ssm', 'secretsmanager') AND purpose IN ('application', 'bootstrap') FACET `service.name`, integration LIMIT 6"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Acessos técnicos concluídos — aplicação e inicialização",
+          "layout": {
+            "row": 44,
+            "column": 1,
+            "width": 6,
+            "height": 5
+          },
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.integrations.operations`) AS 'Operações' FROM Metric WHERE metricName = 'mecanica.integrations.operations' AND `service.name` IN ('mecanica-api', 'mecanica-auth') AND `deployment.environment.name` = {{environment}} AND integration IN ('postgresql', 'ssm', 'secretsmanager') AND purpose IN ('application', 'bootstrap') FACET `service.name`, integration LIMIT 6"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Falhas e timeouts dos acessos técnicos",
+          "layout": {
+            "row": 44,
+            "column": 7,
+            "width": 6,
+            "height": 5
+          },
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT sum(`mecanica.integrations.operations`) AS 'Falhas e timeouts' FROM Metric WHERE metricName = 'mecanica.integrations.operations' AND `service.name` IN ('mecanica-api', 'mecanica-auth') AND `deployment.environment.name` = {{environment}} AND integration IN ('postgresql', 'ssm', 'secretsmanager') AND purpose IN ('application', 'bootstrap') AND outcome IN ('failure', 'timeout') FACET `service.name`, integration, operation LIMIT 30"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Falhas e timeouts / acessos concluídos (%)",
+          "layout": {
+            "row": 49,
+            "column": 1,
+            "width": 12,
+            "height": 3
+          },
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": ${account_id},
+                "query": "SELECT 100 * filter(sum(`mecanica.integrations.operations`), WHERE outcome IN ('failure', 'timeout')) / sum(`mecanica.integrations.operations`) AS 'Falhas (%)' FROM Metric WHERE metricName = 'mecanica.integrations.operations' AND `service.name` IN ('mecanica-api', 'mecanica-auth') AND `deployment.environment.name` = {{environment}} AND integration IN ('postgresql', 'ssm', 'secretsmanager') AND purpose IN ('application', 'bootstrap') AND outcome IN ('success', 'failure', 'timeout') FACET `service.name`, integration LIMIT 6"
+              }
+            ]
           }
         }
       ]
