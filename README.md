@@ -64,3 +64,7 @@ Definição e consultas históricas validadas em 18/10/2026; publicação ainda 
 ### Publicação dos dashboards pelo workflow — 18/10/2026
 
 Workflow, role/policy do bootstrap e CI offline preparados/validados localmente. Antes da primeira execução: plano do bootstrap revisado/aprovado/aplicado → Environments newrelic/newrelic-approval protegidos e variáveis/Secret cadastrados → PR/main → newrelic-provision/revisão/aprovação. Fila compartilhada, workspace default, artefatos sete dias, apply somente plano salvo e conferência posterior sem reparo automático. Não houve execução remota, configuração de GitHub ou apply nesta entrega. [Preparação, credenciais e operação](observability/newrelic/README.md#publicação-padrão-pelo-github-actions). Não é necessário subir o ambiente; não executar alternativa local simultaneamente.
+
+### E5.8 — Acessos técnicos às integrações
+
+O dashboard Integrações e autenticação passa a incluir as métricas de operações PostgreSQL/SSM/Secrets Manager da API e autenticação. [Semântica, consultas e publicação](observability/newrelic/README.md#acessos-técnicos-postgresql-ssm-e-secrets-manager--e58). Sem alteração de IAM, Collector, workflows ou alertas; comprovação implantada pendente.
