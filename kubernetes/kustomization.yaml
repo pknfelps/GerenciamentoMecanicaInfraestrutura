@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - svc-gerenciamento-api.yaml
   - namespace-database-init.yaml
+  - smtp4dev

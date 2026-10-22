@@ -1,6 +1,6 @@
 # AE.4 — Preparação IAM do envio centralizado
 
-**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login, plano AWS, apply, execução remota ou configuração GitHub. A AE.4 continua parcial: rede, SMTP4dev, catálogos físicos e bloqueios dos workflows ainda serão implementados. [Plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md).
+**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login, plano AWS, apply, execução remota ou configuração GitHub. A AE.4 continua parcial: rede, catálogos físicos e bloqueios dos workflows ainda serão implementados. Os [manifestos SMTP4dev foram preparados e validados localmente em etapa própria](AE4_SMTP4DEV_MANIFESTOS.md). [Plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md).
 
 ## Proprietários e identidades
 

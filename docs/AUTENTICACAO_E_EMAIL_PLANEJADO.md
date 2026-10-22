@@ -1,6 +1,6 @@
 # Infraestrutura planejada — autenticação e captura SMTP
 
-**22/10/2026 — preparação documental, sem Terraform/manifestos/workflows ou recursos alterados.** [Plano extra AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md), independente de E5/E6/E7. O repositório de funções já foi renomeado GerenciamentoMecanicaServerless na AE.2 e administrará auth/email em duas stacks SAM separadas.
+**22/10/2026 — plano de infraestrutura com avanços locais registrados abaixo.** Sem aplicação AWS nesta preparação. [Plano extra AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md), independente de E5/E6/E7. O repositório de funções já foi renomeado GerenciamentoMecanicaServerless na AE.2 e administrará auth/email em duas stacks SAM separadas.
 
 ## Responsabilidades a implementar
 
@@ -54,3 +54,9 @@ Auth consulta o cliente antes de qualquer gravação. Se ausente, registra somen
 Terraform fmt/init sem backend/validate aprovados no bootstrap e na base; JSONs/trusts hom/prd e limites conferidos localmente. A confiança email exige audience/subject exatos; develop/hom e main/prd dependerão das restrições GitHub/workflows AE.8, sem claim ref personalizada. Roles separadas com o mesmo contexto OIDC não isolam acesso aos workflows. A AE.2 permanece concluída, sem refazer rename/trust antigos.
 
 Esta parte não criou SMTP4dev, SG/listener/target group, access entry, catálogos, função, alias ou workflow email. Eles permanecem nas etapas próprias da AE.4/AE.5/AE.8. Publicação/aplicação e comprovação na AWS exigem autorização posterior; AE.4 não foi marcada como concluída.
+
+## AE.4 — manifestos SMTP4dev validados localmente
+
+[Implementação e evidências](AE4_SMTP4DEV_MANIFESTOS.md): Kustomization comum em kubernetes/smtp4dev, incluída na raiz; namespace/ServiceAccount sem token, Deployment sem root/capabilities com readonly e emptyDirs em memória, ConfigMap com hash, Service SMTP NodePort 30025 e web ClusterIP. Container usa 2525/8080; Services preservam 25/80. Captura 3.15.0 sem relay/PVC, retenção 100/100, limite MIME 512 KiB e logs técnicos sem conteúdo.
+
+Renderização hom/prd e schemas Kubernetes aprovados; Docker confirmou captura, retenção, bloqueio de settings, ausência de dados fictícios no stdout e perda integral da caixa após reinício. Não é comprovação de acesso Lambda ou capacidade EKS. Terraform/rede/SSM, bloqueios de descarte e associação de inspeção continuam pendentes. Workflows não foram alterados/executados e AE.4 continua parcial. A remoção do volume SMTP do Compose local será feita na integração AE.5/AE.7, sem alterar o volume PostgreSQL.

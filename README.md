@@ -8,7 +8,7 @@ Infraestrutura AWS em Terraform, manifestos Kubernetes e configuração do New R
 |---|---|
 | bootstrap | Backend S3, artefatos, ECR, OIDC, IAM persistente das pipelines/autenticação e metadados dos Secrets de observabilidade |
 | terraform | VPC/subnets, NAT, EKS/add-ons/acessos, SGs, NLB/ASG, JWT/Pod Identity da API, identidade do Collector e catálogo SSM base v2 |
-| kubernetes | Service NodePort, namespace database-init e Kustomizations independentes do Collector |
+| kubernetes | Service da API, namespace database-init, SMTP4dev efêmero e Kustomizations independentes do Collector |
 | gateway | REST API Regional, VPC Link V2, integrações HTTP/Lambda, access logs e catálogo SSM Gateway v2 |
 | observability/newrelic | Três dashboards, cinco alertas e notificações, com estado persistente independente do destroy AWS |
 
@@ -101,4 +101,4 @@ O endpoint Gateway é publicado por ambiente no catálogo e resumo do provisiona
 
 Decisão de 22/10/2026, ainda sem implantação: SMTP4dev privado/efêmero no EKS, sem relay externo, com envio centralizado em EmailFunction invocada por API/auth. O cliente solicita/confirma o código e recebe JWT Customer; sem Authorizer ou token por OS. O repositório já renomeado GerenciamentoMecanicaServerless reunirá as funções, com dois SAM/stacks e workflows independentes/reutilizáveis. A migração inclui OIDC, rotas/permissões Gateway, catálogo de envio e novos bloqueios: email exige API/auth removidas; base exige banco e email ausentes. A ordem operacional atual só muda quando essa implementação for publicada. [Escopo de infraestrutura](docs/AUTENTICACAO_E_EMAIL_PLANEJADO.md) · [Plano AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md). Checklists oficiais preservados.
 
-AE.4: [IAM do envio preparado e validado localmente](docs/AE4_IAM_EMAIL.md), com roles próprias email e consumo restrito por API/auth. Rede, SMTP4dev, recursos físicos dos catálogos, bloqueios de descarte e implantação permanecem pendentes; nenhum plano/apply AWS nesta preparação.
+AE.4: [IAM do envio preparado e validado localmente](docs/AE4_IAM_EMAIL.md), com roles próprias email e consumo restrito por API/auth. [Manifestos SMTP4dev e captura efêmera validados localmente](docs/AE4_SMTP4DEV_MANIFESTOS.md), incluídos na raiz Kubernetes. Rede privada, recursos físicos dos catálogos, bloqueios de descarte e implantação permanecem pendentes; nenhum plano/apply AWS nesta preparação.
