@@ -88,3 +88,23 @@ output "s3_vpc_endpoint_id" {
   description = "Gateway endpoint S3 dos workloads."
   value       = aws_vpc_endpoint.s3.id
 }
+
+output "smtp_host" {
+  description = "DNS do NLB interno para captura SMTP; nao e o DNS do Service Kubernetes."
+  value       = aws_lb.api.dns_name
+}
+
+output "smtp_port" {
+  description = "Porta TCP do listener SMTP no NLB interno."
+  value       = aws_lb_listener.smtp.port
+}
+
+output "email_security_group_id" {
+  description = "SG reservado para a EmailFunction; o SAM email administra suas regras de saida."
+  value       = aws_security_group.email.id
+}
+
+output "smtp_target_group_arn" {
+  description = "Target group SMTP para conferencia operacional dos targets do EKS."
+  value       = aws_lb_target_group.smtp.arn
+}

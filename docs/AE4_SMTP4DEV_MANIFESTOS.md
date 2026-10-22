@@ -1,6 +1,6 @@
 # AE.4 — Manifestos do SMTP4dev
 
-**22/10/2026 — manifestos preparados e captura comprovada no Docker local.** Sem login, plano/apply AWS, aplicação Kubernetes ou execução remota. Esta parte integra o [plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md); não reabre os aceites E5/E6/E7. A rede privada e os demais recursos da AE.4 continuam pendentes.
+**22/10/2026 — manifestos preparados e captura comprovada no Docker local.** Sem login, plano/apply AWS, aplicação Kubernetes ou execução remota. Esta parte integra o [plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md); não reabre os aceites E5/E6/E7. A [rede privada e os metadados SSM foram preparados em etapa própria](AE4_REDE_SMTP.md), sem aplicação AWS; associação de inspeção e bloqueios de descarte continuam pendentes na AE.4.
 
 ## Recursos e integração com a base
 
@@ -68,6 +68,6 @@ Essas evidências não comprovam scheduling, regras SG, NLB/health checks, acess
 
 ## Próximas partes da AE.4
 
-Implementar listener/target group/ASG attachment SMTP no NLB existente, SG reservado email e regras mínimas; publicar metadados SMTP/SG no catálogo da base; criar associação de leitura para inspeção da pipeline email e ampliar bloqueios de descarte. Depois, preparar/publicar EmailFunction e consumidores conforme AE.5–AE.8. Planos/apply e comprovação na AWS dependem de autorização posterior.
+[Listener/target group/ASG attachment SMTP, SG reservado/regras mínimas e metadados SMTP/SG foram preparados e validados localmente](AE4_REDE_SMTP.md). Criar a associação de leitura para inspeção da pipeline email e ampliar os bloqueios de descarte. Depois, preparar/publicar EmailFunction e consumidores conforme AE.5–AE.8. Planos/apply e comprovação na AWS dependem de autorização posterior.
 
 Referências da imagem fixada: [opções de configuração](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/appsettings.json), [inicialização/logger](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/Program.cs) e [armazenamento em memória](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/Startup.cs).

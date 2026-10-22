@@ -2,7 +2,8 @@ locals {
   nlb_name = "${local.name_prefix}-api"
 }
 
-# VPC Link V2: entrada TCP 80 exclusiva do SG reservado do Gateway.
+# VPC Link V2: TCP 80 do Gateway; captura SMTP: TCP 2525 da funcao email.
+# Preservar a descricao historica do SG, pois sua alteracao pode substitui-lo.
 resource "aws_security_group" "nlb" {
   name        = "${local.name_prefix}-nlb"
   description = "NLB interno da API; entrada somente por PrivateLink"
@@ -15,12 +16,26 @@ resource "aws_security_group" "nlb" {
     security_groups = [aws_security_group.gateway.id]
     description     = "VPC Link V2 do Gateway do proprio ambiente"
   }
+  ingress {
+    from_port       = local.smtp_port
+    to_port         = local.smtp_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.email.id]
+    description     = "Captura SMTP da funcao email do proprio ambiente"
+  }
   egress {
     from_port       = 30080
     to_port         = 30080
     protocol        = "tcp"
     security_groups = [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
     description     = "Trafego e health checks ao NodePort da API"
+  }
+  egress {
+    from_port       = local.smtp_node_port
+    to_port         = local.smtp_node_port
+    protocol        = "tcp"
+    security_groups = [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
+    description     = "Trafego e health checks ao NodePort SMTP4dev"
   }
 }
 

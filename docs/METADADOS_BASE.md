@@ -2,7 +2,7 @@
 
 Fonte: `terraform/metadata.tf`, recursos aws_ssm_parameter.configuration. Namespace `/mecanica/<hom|prd>/base/v2/<campo>`, String/Standard; listas de subnets JSON.
 
-Campos: vpc-id; workload-subnet-ids; database-subnet-ids; cluster-name; cluster-arn; namespace=default; init-namespace=database-init; api-security-group-id; auth-security-group-id; gateway-security-group-id; init-security-group-id; api-service-name; api-service-port; api-node-port; nlb-arn; nlb-dns-name; nlb-security-group-id; nlb-target-group-arn; nlb-listener-port; nlb-listener-protocol; api-integration-uri; ecr-repository-url; jwt-secret-arn; jwt-issuer; jwt-audience.
+Campos: vpc-id; workload-subnet-ids; database-subnet-ids; cluster-name; cluster-arn; namespace=default; init-namespace=database-init; api-security-group-id; auth-security-group-id; email-security-group-id; smtp-host; smtp-port; gateway-security-group-id; init-security-group-id; api-service-name; api-service-port; api-node-port; nlb-arn; nlb-dns-name; nlb-security-group-id; nlb-target-group-arn; nlb-listener-port; nlb-listener-protocol; api-integration-uri; ecr-repository-url; jwt-secret-arn; jwt-issuer; jwt-audience.
 
 Banco lê campos de rede/EKS via data sources Terraform. API/Gateway consomem configuração pública em seus deploys. Auth usa SAM/CloudFormation conforme ADR 009: workflow lê vpc-id, workload-subnet-ids, auth-security-group-id da base e security-group-id do banco com AWS CLI; jq transforma array JSON das subnets em lista CSV para o parâmetro CloudFormation. Confere VPC/ambiente, subnets em duas AZs e SGs, sem estado remoto ou valores secretos. Auth/v2 pertence à stack; base/database v2 permanecem Terraform. JWT implementado/validado em hom no ciclo anterior; recriar dependências antes de implantar auth. Chave no Secrets Manager, fora do SSM. [Consumo JWT](JWT_COMPARTILHADO.md).
 
@@ -13,3 +13,9 @@ Adotar/retirar v1 ativo somente depois de produtores/consumidores v2. [Procedime
 ## Configuração Gateway
 
 A base publica gateway-security-group-id e permanece proprietária desse SG e de suas regras. O estado separado gateway publica sete parâmetros String/Standard em /mecanica/<ambiente>/gateway/v2/: rest-api-id, vpc-link-id, stage-name, endpoint, api-openapi-key, auth-openapi-key e auth-invocation-arn. Consome a rede/NLB da base e a versão numérica/contrato auth por data sources, sem valores secretos. [Procedimento](GATEWAY.md).
+
+## Captura SMTP — AE.4 preparada localmente
+
+smtp-host é o DNS do NLB interno existente, smtp-port é 2525 e email-security-group-id identifica o SG reservado da função email. As três chaves são String/Standard, do mesmo proprietário Terraform da base, sem credenciais. [Rede SMTP e limites](AE4_REDE_SMTP.md).
+
+A futura pipeline email lê também vpc-id, workload-subnet-ids e nlb-security-group-id, usando o escopo de leitura já preparado no bootstrap, e passa a configuração ao SAM. O egress pertence ao SAM email; API/auth invocam a função pelo catálogo email/v1 e não recebem configuração SMTP. Os recursos foram declarados/validados localmente, sem plano/apply AWS ou mudança do catálogo auth/Gateway. Publicação de metadados não comprova rollout ou disponibilidade de captura.

@@ -1,6 +1,6 @@
 # AE.4 — Preparação IAM do envio centralizado
 
-**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login, plano AWS, apply, execução remota ou configuração GitHub. A AE.4 continua parcial: rede, catálogos físicos e bloqueios dos workflows ainda serão implementados. Os [manifestos SMTP4dev foram preparados e validados localmente em etapa própria](AE4_SMTP4DEV_MANIFESTOS.md). [Plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md).
+**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login, plano AWS, apply, execução remota ou configuração GitHub. A AE.4 continua parcial: associação de inspeção, bloqueios dos workflows e implantação ainda estão pendentes. [Rede SMTP/catálogos da base preparados e validados localmente em etapa própria](AE4_REDE_SMTP.md). Os [manifestos SMTP4dev foram preparados e validados localmente em etapa própria](AE4_SMTP4DEV_MANIFESTOS.md). [Plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md).
 
 ## Proprietários e identidades
 
@@ -78,7 +78,7 @@ Evidências locais ignoradas em artifacts/ae4/iam no repositório da API: logs i
 
 ## Continuação
 
-1. Implementar rede/SMTP4dev, catálogos físicos, access entry View e bloqueio base-destroy restantes na AE.4; manter os nomes e proprietários aqui definidos.
+1. Manifestos e rede/catálogos SMTP preparados e validados localmente nos registros próprios. Implementar access entry View e bloqueios de descarte restantes na AE.4; manter os nomes e proprietários aqui definidos.
 2. Implementar envio na AE.5 e workflows específicos/reutilizáveis na AE.8. Não implantar função vazia apenas para preencher a stack.
 3. Somente mediante autorização posterior: gerar/revisar plano salvo do bootstrap e aplicar exclusivamente o aprovado. Esta preparação declara 24 recursos novos no bootstrap, mais a alteração esperada da bucket policy de artefatos; isso não substitui o resultado de um plano real. A policy de consumo da API pertence ao plano da base por ambiente.
 4. Cadastrar as novas variáveis GitHub depois do apply e comprovar OIDC, IAM efetivo, aliases, rede e descarte na etapa AWS autorizada. Não executar destroy como teste.

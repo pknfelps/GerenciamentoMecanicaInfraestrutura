@@ -60,3 +60,9 @@ Esta parte não criou SMTP4dev, SG/listener/target group, access entry, catálog
 [Implementação e evidências](AE4_SMTP4DEV_MANIFESTOS.md): Kustomization comum em kubernetes/smtp4dev, incluída na raiz; namespace/ServiceAccount sem token, Deployment sem root/capabilities com readonly e emptyDirs em memória, ConfigMap com hash, Service SMTP NodePort 30025 e web ClusterIP. Container usa 2525/8080; Services preservam 25/80. Captura 3.15.0 sem relay/PVC, retenção 100/100, limite MIME 512 KiB e logs técnicos sem conteúdo.
 
 Renderização hom/prd e schemas Kubernetes aprovados; Docker confirmou captura, retenção, bloqueio de settings, ausência de dados fictícios no stdout e perda integral da caixa após reinício. Não é comprovação de acesso Lambda ou capacidade EKS. Terraform/rede/SSM, bloqueios de descarte e associação de inspeção continuam pendentes. Workflows não foram alterados/executados e AE.4 continua parcial. A remoção do volume SMTP do Compose local será feita na integração AE.5/AE.7, sem alterar o volume PostgreSQL.
+
+## AE.4 — rede SMTP e metadados preparados localmente
+
+[Implementação/revisão](AE4_REDE_SMTP.md): SG reservado email, listener TCP 2525 no NLB existente, target group SMTP/30025 com health TCP e attachment independente ao mesmo ASG; regras entre SG email → NLB → EKS. Preservados HTTP/80, target group e health check API, VPC Link e recursos de rede. Base/v2 ganha smtp-host, smtp-port e email-security-group-id. Permissões previamente preparadas cobrem esta parte, sem ampliar bootstrap.
+
+Terraform fmt/init sem backend/validate aprovados, com lockfile/providers preservados. Nenhum plano, apply ou teste AWS. Associação de inspeção e bloqueios de descarte continuam pendentes na AE.4; função/egress SAM e consumidores nas AE.5–AE.8. Os registros anteriores descrevem o escopo de cada parte, não comprovação de implantação.
