@@ -1,0 +1,41 @@
+# Infraestrutura planejada — autenticação e captura SMTP
+
+**22/10/2026 — preparação documental, sem Terraform/manifestos/workflows ou recursos alterados.** [Plano extra AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md), independente de E5/E6/E7. O repositório de funções já foi renomeado GerenciamentoMecanicaServerless na AE.2 e administrará auth/email em duas stacks SAM separadas.
+
+## Responsabilidades a implementar
+
+- Bootstrap: revisar confiança OIDC de transição de nome, policies de pipeline por componente e role runtime email; conceder à API/auth invocação restrita do alias email do ambiente. Email não precisa de acesso ao RDS ou Secret JWT. Logs/configuração/SMTP e eventual telemetria terão somente as permissões necessárias.
+- Base: SMTP4dev por ambiente em EKS, relay externo desabilitado e mensagens efêmeras sem PVC. Expor endpoint SMTP privado alcançável pela função email na VPC; apenas ClusterIP ou DNS do Service não basta. AE.1 define NLB interno existente TCP 2525, target group/NodePort 30025 próprios e SG de origem email, preservando o listener da API. Captura demonstrativa sem TLS/autenticação SMTP, sem apresentar rede privada como criptografia. AE.4 implementará e comprovará regras/capacidade; sem IP efêmero fixado em configuração.
+- Caixa: acesso operacional privado por port-forward, não uma rota pública da API ou funcionalidade do JWT Mechanic. Não enviar código em logs/respostas públicas. Captura simula recebimento e não comprova e-mail pessoal.
+- Gateway: admitir somente os dois endpoints HTTP novos de auth, remover a restrição exclusiva customers/validate e ajustar Invoke permission/contrato. Encaminhar JWT às operações da API sem Authorizer nem substituição por JWT vinculado à OS. Preservar integração privada, logs sanitizados, retention/data tracing atuais e versão numérica de auth.
+- Integração email: catálogo separado com ARN de alias estável, versão auditável e metadados técnicos sem segredos. API/auth invocam sincronamente e verificam erros da função, respeitando prazo total; sem fila/retry próprio/garantia de entrega única.
+
+As roles persistentes continuam no bootstrap e são referenciadas pelo SAM; não transferir recursos já existentes de proprietário automaticamente. Prefixos S3/SSM e permissões das pipelines auth/email devem ser independentes. A função nova é privada, sem Gateway/Function URL de envio.
+
+## Ordem futura e bloqueios
+
+Provisionar bootstrap aprovado/aplicado → base com SMTP4dev → banco/migração e email → API/auth → Gateway. Banco e email são independentes; API/auth podem seguir após suas dependências. Dois templates/stacks permitem atualizar o envio sem republicar auth/API somente para trocar número de versão.
+
+Destruir Gateway → API/auth → banco/email → base. Email-destroy bloqueia enquanto API/auth existirem e verifica seus resíduos de rede. Database-destroy mantém seus consumidores API/auth; não inventar dependência de RDS para email. Base-destroy precisa exigir também email ausente, além de banco, porque a função depende da rede/SMTP4dev da base. Falhas de inspeção não são ausência; preservar bloqueio imediato, sem exclusão manual de ENIs ou alterações automáticas de estado.
+
+Renomear o repositório exige revisar OIDC, links/referências, Environments/variáveis/required checks e proteções de artefatos antes de executar workflows novos. Preparar/aplicar a confiança necessária antes da troca e retirar confiança antiga depois, mediante autorização. Não ampliar principal ou região como atalho.
+
+## Validação e limites
+
+Preparar Kustomize, Terraform/bootstrap/base, SAM e actionlint/ShellCheck com ferramentas existentes, sem scripts auxiliares ou mocks operacionais. Validar capacidade/rede, caixa sem relay e sem persistência, IAM e isolamento entre ambientes, endpoint privado e fluxos com falhas. Aplicações/contratos e banco mudam nos seus repositórios, de forma coordenada; não basta instalar SMTP4dev.
+
+Mensagens poderão ser perdidas ao recriar pod/ambiente. Desafios continuam no banco até expiração/consumo e a aplicação deve permitir solicitar novo código. Sem envio externo, UI pública, persistência da caixa, teste de carga ou novo aceite E5. Planos/apply das próximas entregas, destroy e publicação dependem de autorização posterior; a transição administrativa AE.2 tem registro específico abaixo.
+
+
+## Consolidação AE.1
+
+[Contrato central](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/CONTRATOS_EXTRA_AUTENTICACAO_E_EMAIL.md): SMTP4dev 3.15.0 com banco em memória, 100 mensagens/sessões, sem PVC/relay; web somente ClusterIP/port-forward. Base publica smtp-host/smtp-port/email-security-group-id; stack email publica catálogo email/v1 e alias live. EmailFunction recebe configuração SMTP no deploy, sem acesso a banco/JWT. Não criar outro NLB nem expor SMTP/UI publicamente. Os recursos e suas permissões continuam pendentes, sujeitos aos planos/aprovações próprios.
+
+
+## AE.2 — migração e finalização OIDC
+
+Transição inicial aprovada/aplicada em 22/10/2026: 0 criações, 3 alterações de trust e 0 exclusões nas roles auth-ci/hom-auth/prd-auth, sem mudanças de permissões. GitHub/raiz/remote já usam GerenciamentoMecanicaServerless, mantendo owner/repository ID, visibilidade, proteções e Environments. [Auth-ci #16](https://github.com/pknfelps/GerenciamentoMecanicaServerless/actions/runs/39812817320) passou em develop e confirmou a autenticação OIDC do novo nome.
+
+O prefixo canônico auth em bootstrap.tfvars local e bootstrap.tfvars.example agora usa GerenciamentoMecanicaServerless. A variável e o exemplo temporários foram retirados do código local. [Plano final salvo](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE2_FINALIZACAO_OIDC_2026-10-22.md): 0 criações, 3 alterações, 0 exclusões; remove somente os subjects antigos. Aprovado/aplicado com hash conferido: 0 criações, 3 alterações e 0 exclusões. Trust policies implantadas conferidas, subjects antigos ausentes e Terraform posterior sem diferenças (código 0). AE.2 concluída; alterações locais seguem para PR do mantenedor. Não reaplicar o plano inicial consumido nem usar os antigos tfvars de transição.
+
+Estrutura AuthFunction/EmailFunction validada localmente; função de envio, SMTP, IAM e publicação permanecem nas próximas etapas AE, sem alterações funcionais nesta migração.

@@ -9,7 +9,7 @@ github_subject_prefixes = {
   api      = "repo:pknfelps/GerenciamentoMecanicaSistema"
   infra    = "repo:pknfelps@114608389/GerenciamentoMecanicaInfraestrutura@1375105948"
   database = "repo:pknfelps@114608389/GerenciamentoMecanicaBancoDados@1375106298"
-  auth     = "repo:pknfelps@114608389/GerenciamentoMecanicaAutenticacao@1375105446"
+  auth     = "repo:pknfelps@114608389/GerenciamentoMecanicaServerless@1375105446"
 }
 
 # A consulta de 2026-09-22 não encontrou providers OIDC na conta.
