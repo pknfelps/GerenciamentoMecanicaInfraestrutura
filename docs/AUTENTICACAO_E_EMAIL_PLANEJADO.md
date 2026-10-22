@@ -14,7 +14,7 @@ As roles persistentes continuam no bootstrap e são referenciadas pelo SAM; não
 
 ## Ordem futura e bloqueios
 
-Provisionar bootstrap aprovado/aplicado → base com SMTP4dev → banco/migração e email → API/auth → Gateway. Banco e email são independentes; API/auth podem seguir após suas dependências. Dois templates/stacks permitem atualizar o envio sem republicar auth/API somente para trocar número de versão.
+Provisionar bootstrap aprovado/aplicado → base com SMTP4dev → banco inicializado e email → API/auth → Gateway. Banco e email são independentes; API/auth podem seguir após suas dependências. Dois templates/stacks permitem atualizar o envio sem republicar auth/API somente para trocar número de versão.
 
 Destruir Gateway → API/auth → banco/email → base. Email-destroy bloqueia enquanto API/auth existirem e verifica seus resíduos de rede. Database-destroy mantém seus consumidores API/auth; não inventar dependência de RDS para email. Base-destroy precisa exigir também email ausente, além de banco, porque a função depende da rede/SMTP4dev da base. Falhas de inspeção não são ausência; preservar bloqueio imediato, sem exclusão manual de ENIs ou alterações automáticas de estado.
 
@@ -39,3 +39,18 @@ Transição inicial aprovada/aplicada em 22/10/2026: 0 criações, 3 alteraçõe
 O prefixo canônico auth em bootstrap.tfvars local e bootstrap.tfvars.example agora usa GerenciamentoMecanicaServerless. A variável e o exemplo temporários foram retirados do código local. [Plano final salvo](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE2_FINALIZACAO_OIDC_2026-10-22.md): 0 criações, 3 alterações, 0 exclusões; remove somente os subjects antigos. Aprovado/aplicado com hash conferido: 0 criações, 3 alterações e 0 exclusões. Trust policies implantadas conferidas, subjects antigos ausentes e Terraform posterior sem diferenças (código 0). AE.2 concluída; alterações locais seguem para PR do mantenedor. Não reaplicar o plano inicial consumido nem usar os antigos tfvars de transição.
 
 Estrutura AuthFunction/EmailFunction validada localmente; função de envio, SMTP, IAM e publicação permanecem nas próximas etapas AE, sem alterações funcionais nesta migração.
+
+
+## Revisão do mantenedor — AE.3
+
+Tabelas customer_auth_challenges/customer_auth_request_limits diretamente no Init.sql para banco vazio; sem migrations. O destroy do ambiente remove a instância RDS, e novo provisionamento recria os dados a partir do SQL. Nenhum CHECK de negócio, UNIQUE condicionado ao estado, FK nova de cliente ou cascata; regras de validade, tentativas, estados e consumo são implementadas/validadas em C#, com transações e operações condicionais.
+
+Auth consulta o cliente antes de qualquer gravação. Se ausente, registra somente mensagem fixa sanitizada e retorna imediatamente o 202 genérico com identificador opaco em memória; não persiste desafio, limite ou auditoria nem executa envio/limpeza. Para cliente existente elegível, limites usam customer_id; não há HMAC/HKDF do documento para o índice. Código continua protegido por PBKDF2-SHA256. Esse fluxo será implementado na AE.6; o ajuste atual consolida o contrato e o DDL.
+
+## AE.4 — IAM preparado localmente
+
+[Registro de implementação](AE4_IAM_EMAIL.md): bootstrap declara roles runtime/pipeline email hom/prd, policies próprias para SAM/artefatos/catálogo email/v1, consumo do alias live pelo runtime auth e autorização da base para os futuros SG/target group SMTP/access entry de inspeção. terraform/api-email.tf acrescenta o consumo ao runtime API no seu proprietário atual. As policies/trusts antigas auth/CI e os workflows permanecem intactos.
+
+Terraform fmt/init sem backend/validate aprovados no bootstrap e na base; JSONs/trusts hom/prd e limites conferidos localmente. A confiança email exige audience/subject exatos; develop/hom e main/prd dependerão das restrições GitHub/workflows AE.8, sem claim ref personalizada. Roles separadas com o mesmo contexto OIDC não isolam acesso aos workflows. A AE.2 permanece concluída, sem refazer rename/trust antigos.
+
+Esta parte não criou SMTP4dev, SG/listener/target group, access entry, catálogos, função, alias ou workflow email. Eles permanecem nas etapas próprias da AE.4/AE.5/AE.8. Publicação/aplicação e comprovação na AWS exigem autorização posterior; AE.4 não foi marcada como concluída.
