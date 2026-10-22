@@ -66,3 +66,9 @@ Renderização hom/prd e schemas Kubernetes aprovados; Docker confirmou captura,
 [Implementação/revisão](AE4_REDE_SMTP.md): SG reservado email, listener TCP 2525 no NLB existente, target group SMTP/30025 com health TCP e attachment independente ao mesmo ASG; regras entre SG email → NLB → EKS. Preservados HTTP/80, target group e health check API, VPC Link e recursos de rede. Base/v2 ganha smtp-host, smtp-port e email-security-group-id. Permissões previamente preparadas cobrem esta parte, sem ampliar bootstrap.
 
 Terraform fmt/init sem backend/validate aprovados, com lockfile/providers preservados. Nenhum plano, apply ou teste AWS. Associação de inspeção e bloqueios de descarte continuam pendentes na AE.4; função/egress SAM e consumidores nas AE.5–AE.8. Os registros anteriores descrevem o escopo de cada parte, não comprovação de implantação.
+
+## AE.4 — inspeção/descarte e preparação local concluída
+
+[View/default e bloqueios da base](AE4_INSPECAO_E_DESCARTE.md) implementados: a pipeline email pode inspecionar os consumidores da API; base-destroy verifica função email, ENIs e egress antes do plan e antes da limpeza/apply, além do banco. SG reservado isolado é permitido. Erros e resíduos bloqueiam imediatamente. Bootstrap troca GetFunctionConfiguration pela listagem Lambda regional em JSON, sem escrita/Invoke ou acesso a Secrets.
+
+Terraform da base/bootstrap e actionlint/ShellCheck aprovados; policy base-email com 3.112 caracteres por ambiente. Preparação local AE.4 concluída, sem aplicação/comprovação AWS. EmailFunction segue na AE.5; email-destroy e seus próprios bloqueios seguem junto dos workflows na AE.8. Registros anteriores descrevem o estado de cada etapa; os aceites oficiais E5/E6/E7 permanecem intactos.

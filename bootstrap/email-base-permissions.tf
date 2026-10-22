@@ -48,10 +48,11 @@ locals {
         Resource = "arn:aws:elasticloadbalancing:${var.aws_region}:${var.aws_account_id}:targetgroup/${var.project_name}-${environment}-smtp/*"
       },
       {
-        Sid      = "InspectEmailBeforeBaseDestroy"
-        Effect   = "Allow"
-        Action   = ["lambda:GetFunctionConfiguration"]
-        Resource = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${var.project_name}-${environment}-email"
+        Sid       = "InspectRegionalEmailCollection"
+        Effect    = "Allow"
+        Action    = ["lambda:ListFunctions"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } }
       },
       {
         Sid      = "CreateEmailInspectionAccess"

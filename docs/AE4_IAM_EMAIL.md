@@ -1,6 +1,6 @@
 # AE.4 — Preparação IAM do envio centralizado
 
-**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login, plano AWS, apply, execução remota ou configuração GitHub. A AE.4 continua parcial: associação de inspeção, bloqueios dos workflows e implantação ainda estão pendentes. [Rede SMTP/catálogos da base preparados e validados localmente em etapa própria](AE4_REDE_SMTP.md). Os [manifestos SMTP4dev foram preparados e validados localmente em etapa própria](AE4_SMTP4DEV_MANIFESTOS.md). [Plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md).
+**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login, plano AWS, apply, execução remota ou configuração GitHub. A preparação local da AE.4 foi concluída com [View/default e bloqueio base-destroy por email](AE4_INSPECAO_E_DESCARTE.md); aplicação e comprovação AWS permanecem pendentes. [Rede SMTP/catálogos da base preparados e validados localmente em etapa própria](AE4_REDE_SMTP.md). Os [manifestos SMTP4dev foram preparados e validados localmente em etapa própria](AE4_SMTP4DEV_MANIFESTOS.md). [Plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md).
 
 ## Proprietários e identidades
 
@@ -60,7 +60,7 @@ bootstrap/email-base-permissions.tf acrescenta uma policy gerenciada por ambient
 
 - Criar/remover o SG mecanica-ENV-email, com tags obrigatórias e retirada do egress padrão. Autorização existente cobre uso da VPC própria/tag de criação; o SAM email administrará seu egress funcional.
 - Criar/taguear/alterar/remover somente o target group mecanica-ENV-smtp. Não cria outro NLB. As permissões existentes já cobrem listener no NLB atual, associação do ASG próprio e regras NLB/nós necessárias; nenhuma regra/porta foi criada nesta etapa.
-- GetFunctionConfiguration da função email do próprio ambiente para futura checagem base-destroy. ENIs/SGs usam as leituras regionais existentes.
+- ListFunctions restrito a us-east-1 para checagem base-destroy por array JSON, substituindo o GetFunctionConfiguration antes preparado. A listagem IAM abrange metadados regionais; o workflow filtra o nome email exato do ambiente. ENIs/SGs usam as leituras regionais existentes. [Revisão e limites](AE4_INSPECAO_E_DESCARTE.md).
 - Administrar somente a access entry da pipeline email no cluster próprio e associar exclusivamente AmazonEKSViewPolicy no namespace default, com ForAllValues e Null exigindo namespaces presentes. Sem Edit, Secrets ou ClusterAdmin. Essa é autorização administrativa da base; access entry/associação físicas serão declaradas na próxima parte da AE.4.
 
 O operador já utiliza o acesso EKS atual para port-forward; não foi criada autorização vinculada ao JWT Mechanic. Grupo SMTP4dev, UI privada, probes, recursos, catálogo base/SSM e rede ainda não existem por esta entrega.
@@ -70,7 +70,7 @@ O operador já utiliza o acesso EKS atual para port-forward; não foi criada aut
 - Terraform 1.15.9, AWS provider 6.58.0 e lockfiles atuais: fmt -check, init -backend=false -lockfile=readonly e validate aprovados no bootstrap e na base.
 - Terraform console em cópia isolada sem backend/estado remoto renderizou políticas e trusts hom/prd. A policy API foi avaliada com os valores públicos de conta/prefixo que correspondem à base; não houve substituição de datasource em código de produção ou mock de recurso AWS.
 - JSON, principal, audience/subject, alias, chaves SSM, PassRole, condições regionais/tags e View/default revisados. Ações conferidas nas referências públicas programáticas de autorização AWS, sem usar credenciais da conta. Não é simulação de decisões IAM nem Access Analyzer remoto.
-- Policies gerenciadas: consumo auth 481, provision email 2513, SAM email 1996 e base email 3121 caracteres por ambiente, abaixo de 6144. Inline: runtime 939, metadata da pipeline 1683 e consumo API 481. Trust runtime 130 e pipeline 422, abaixo do limite padrão de 2048. Preconditions preservam os limites individuais das novas policies do bootstrap. [Limites IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html).
+- Policies gerenciadas: consumo auth 481, provision email 2513 e SAM email 1996 caracteres por ambiente; base email revisada para ListFunctions tem 3112 caracteres, conforme registro da inspeção/descarte, abaixo de 6144. Inline: runtime 939, metadata da pipeline 1683 e consumo API 481. Trust runtime 130 e pipeline 422, abaixo do limite padrão de 2048. Preconditions preservam os limites individuais das novas policies do bootstrap. [Limites IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html).
 - A base passa a declarar nove associações de policies gerenciadas por role no escopo atual, incluindo a nova. Nenhuma nova policy inline nessa role; seu limite agregado anterior não foi ampliado. Cotas e associações efetivas na conta continuam exigindo conferência antes da aplicação.
 - Confiança/policies existentes de auth/CI, factories de roles, variáveis, lockfiles, backend, workflows, SAM, manifestos, Gateway, C#, banco e configuração New Relic preservados. Não criados scripts operacionais, mocks AWS ou testes de telemetria.
 
@@ -78,7 +78,7 @@ Evidências locais ignoradas em artifacts/ae4/iam no repositório da API: logs i
 
 ## Continuação
 
-1. Manifestos e rede/catálogos SMTP preparados e validados localmente nos registros próprios. Implementar access entry View e bloqueios de descarte restantes na AE.4; manter os nomes e proprietários aqui definidos.
+1. Manifestos, rede/catálogos SMTP, access entry View/default e bloqueio base-destroy por email preparados e validados localmente nos registros próprios. Manter os nomes/proprietários; o workflow email-destroy e seus bloqueios próprios serão criados na AE.8.
 2. Implementar envio na AE.5 e workflows específicos/reutilizáveis na AE.8. Não implantar função vazia apenas para preencher a stack.
 3. Somente mediante autorização posterior: gerar/revisar plano salvo do bootstrap e aplicar exclusivamente o aprovado. Esta preparação declara 24 recursos novos no bootstrap, mais a alteração esperada da bucket policy de artefatos; isso não substitui o resultado de um plano real. A policy de consumo da API pertence ao plano da base por ambiente.
 4. Cadastrar as novas variáveis GitHub depois do apply e comprovar OIDC, IAM efetivo, aliases, rede e descarte na etapa AWS autorizada. Não executar destroy como teste.

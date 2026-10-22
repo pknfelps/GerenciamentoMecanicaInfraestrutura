@@ -1,6 +1,6 @@
 # AE.4 — Rede privada SMTP e metadados
 
-**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login AWS, leitura de estado remoto, plano, apply ou execução de workflow. Continuação dos [manifestos SMTP4dev](AE4_SMTP4DEV_MANIFESTOS.md) e do [IAM preparado no bootstrap](AE4_IAM_EMAIL.md). A AE.4 continua parcial; esta configuração ainda não comprova conectividade implantada.
+**22/10/2026 — preparado e validado localmente para hom/prd.** Sem login AWS, leitura de estado remoto, plano, apply ou execução de workflow. Continuação dos [manifestos SMTP4dev](AE4_SMTP4DEV_MANIFESTOS.md) e do [IAM preparado no bootstrap](AE4_IAM_EMAIL.md). A preparação local da AE.4 foi completada em etapa própria de [inspeção e descarte](AE4_INSPECAO_E_DESCARTE.md); esta configuração ainda não comprova conectividade implantada.
 
 ## Caminho declarado
 
@@ -67,6 +67,6 @@ Nenhuma chamada AWS, simulação IAM, teste de conectividade VPC ou envio SMTP f
 
 ## Continuação e implantação posterior
 
-Ainda faltam na AE.4: acesso Kubernetes View/default da pipeline email para conferir seus consumidores e bloqueios de descarte da nova dependência. O rollout SMTP já pode ser conferido manualmente pelo procedimento dos manifestos. EmailFunction/egress SAM, alias/catálogo email/v1 e seus consumidores permanecem nas etapas AE.5–AE.8.
+[Acesso View/default da pipeline email e bloqueios de descarte da base implementados e validados localmente](AE4_INSPECAO_E_DESCARTE.md). O workflow email-destroy e suas checagens próprias permanecem na AE.8. O rollout SMTP já pode ser conferido manualmente pelo procedimento dos manifestos. EmailFunction/egress SAM, alias/catálogo email/v1 e seus consumidores permanecem nas etapas AE.5–AE.8.
 
 Após completar o código e mediante autorização: aplicar o bootstrap aprovado, gerar/revisar o plano salvo da base por ambiente, aplicar somente o aprovado e conferir rollout SMTP/saúde dos targets. Depois da publicação da função, validar envio privado real com dados fictícios, ausência de exposição/relay e preservação do caminho HTTP API. Não usar saúde TCP como confirmação Captured. Não executar destroy como teste; atualizar seus bloqueios antes de utilizar a nova cadeia.

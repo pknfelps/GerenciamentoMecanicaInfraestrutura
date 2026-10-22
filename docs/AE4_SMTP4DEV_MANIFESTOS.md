@@ -1,6 +1,6 @@
 # AE.4 — Manifestos do SMTP4dev
 
-**22/10/2026 — manifestos preparados e captura comprovada no Docker local.** Sem login, plano/apply AWS, aplicação Kubernetes ou execução remota. Esta parte integra o [plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md); não reabre os aceites E5/E6/E7. A [rede privada e os metadados SSM foram preparados em etapa própria](AE4_REDE_SMTP.md), sem aplicação AWS; associação de inspeção e bloqueios de descarte continuam pendentes na AE.4.
+**22/10/2026 — manifestos preparados e captura comprovada no Docker local.** Sem login, plano/apply AWS, aplicação Kubernetes ou execução remota. Esta parte integra o [plano extra AE](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md); não reabre os aceites E5/E6/E7. A [rede privada e os metadados SSM foram preparados em etapa própria](AE4_REDE_SMTP.md), sem aplicação AWS; [associação de inspeção e bloqueio base-destroy por email preparados em etapa própria](AE4_INSPECAO_E_DESCARTE.md), sem comprovação AWS.
 
 ## Recursos e integração com a base
 
@@ -51,7 +51,7 @@ Abrir http://127.0.0.1:3000 e encerrar o port-forward com Ctrl+C. A autenticaç�
 
 Para verificar a perda da caixa em etapa autorizada, interromper envios e reiniciar o Deployment. Isso inutiliza a consulta de códigos já capturados; solicitar novo código respeitando o limite da autenticação. Não recuperar códigos por logs ou endpoint de debug.
 
-A remoção pela Kustomization raiz inclui o namespace e a caixa. Os futuros bloqueios base-destroy precisam exigir também EmailFunction ausente antes de descartar sua rede/SMTP; ainda não foram implementados. Não aplicar/remover o SMTP isoladamente enquanto houver consumidores ativos.
+A remoção pela Kustomization raiz inclui o namespace e a caixa. Os [bloqueios base-destroy já preparados](AE4_INSPECAO_E_DESCARTE.md) exigem EmailFunction ausente e rede liberada antes de descartar SMTP; ainda não foram comprovados na AWS. Não aplicar/remover o SMTP isoladamente enquanto houver consumidores ativos.
 
 ## Evidências locais de 22/10/2026
 
@@ -68,6 +68,6 @@ Essas evidências não comprovam scheduling, regras SG, NLB/health checks, acess
 
 ## Próximas partes da AE.4
 
-[Listener/target group/ASG attachment SMTP, SG reservado/regras mínimas e metadados SMTP/SG foram preparados e validados localmente](AE4_REDE_SMTP.md). Criar a associação de leitura para inspeção da pipeline email e ampliar os bloqueios de descarte. Depois, preparar/publicar EmailFunction e consumidores conforme AE.5–AE.8. Planos/apply e comprovação na AWS dependem de autorização posterior.
+[Listener/target group/ASG attachment SMTP, SG reservado/regras mínimas e metadados SMTP/SG foram preparados e validados localmente](AE4_REDE_SMTP.md). [Associação de leitura para inspeção da pipeline email e bloqueios base-destroy preparados e validados localmente](AE4_INSPECAO_E_DESCARTE.md). O workflow email-destroy será criado na AE.8. Depois, preparar/publicar EmailFunction e consumidores conforme AE.5–AE.8. Planos/apply e comprovação na AWS dependem de autorização posterior.
 
 Referências da imagem fixada: [opções de configuração](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/appsettings.json), [inicialização/logger](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/Program.cs) e [armazenamento em memória](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/Startup.cs).
