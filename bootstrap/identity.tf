@@ -106,6 +106,9 @@ locals {
                 for field in fields : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v2/${field}"
               ]
             ]) : ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/*/v2/*"],
+            contains(["api", "auth"], config.component) ? [for field in ["invocation-arn", "contract-version"] :
+              "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/email/v1/${field}"
+            ] : [],
             var.allow_legacy_cleanup ? [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v1/*"] : []
           )
           }, {

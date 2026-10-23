@@ -64,7 +64,7 @@ A remoção pela Kustomization raiz inclui o namespace e a caixa. Os [bloqueios 
 - Reinício do processo: **zero mensagens e zero sessões**, HTTP 200 e SMTP ativo novamente. Sem arquivo de banco nos diretórios temporários. Container/rede de teste removidos.
 - Consumo pontual após captura: aproximadamente 127,9 MiB de memória, sem OOM. Não é teste de carga, capacidade EKS ou dimensionamento definitivo.
 
-Essas evidências não comprovam scheduling, regras SG, NLB/health checks, acesso da Lambda ou capacidade AWS. O Compose local da API ainda tem seu volume SMTP anterior; sua remoção/alinhamento permanece na integração local AE.5/AE.7, preservando o volume PostgreSQL. Nenhum código das aplicações ou contrato HTTP foi alterado pelos manifestos.
+Essas evidências não comprovam scheduling, regras SG, NLB/health checks, acesso da Lambda ou capacidade AWS. O Compose local da API foi alinhado na AE.5: caixa em memória e tmpfs, sem montagem do volume SMTP, com relay desabilitado e volume PostgreSQL preservado. Captura via SAM e caixa vazia após restart foram conferidas; volumes antigos não são apagados automaticamente. [Evidências e comandos](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE5_EMAIL_FUNCTION.md). Nenhum código das aplicações ou contrato HTTP foi alterado pelos manifestos.
 
 ## Próximas partes da AE.4
 

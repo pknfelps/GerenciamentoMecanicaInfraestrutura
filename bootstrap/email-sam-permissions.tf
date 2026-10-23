@@ -39,6 +39,12 @@ locals {
         Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } }
       },
       {
+        Sid      = "PublishOwnEmailTemplates"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
+        Resource = "${local.bucket_arns.artifacts}/contracts/email/*"
+      },
+      {
         Sid      = "LocateSamBucket"
         Effect   = "Allow"
         Action   = ["s3:GetBucketLocation"]

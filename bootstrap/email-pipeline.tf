@@ -15,6 +15,7 @@ resource "aws_iam_role" "email_pipeline" {
       Condition = { StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         "token.actions.githubusercontent.com:sub" = "${var.github_subject_prefixes.auth}:environment:${each.key}"
+        "token.actions.githubusercontent.com:ref" = each.key == "hom" ? "refs/heads/develop" : "refs/heads/main"
       } }
     }]
   })

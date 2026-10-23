@@ -67,6 +67,6 @@ Nenhuma chamada AWS, simulação IAM, teste de conectividade VPC ou envio SMTP f
 
 ## Continuação e implantação posterior
 
-[Acesso View/default da pipeline email e bloqueios de descarte da base implementados e validados localmente](AE4_INSPECAO_E_DESCARTE.md). O workflow email-destroy e suas checagens próprias permanecem na AE.8. O rollout SMTP já pode ser conferido manualmente pelo procedimento dos manifestos. EmailFunction/egress SAM, alias/catálogo email/v1 e seus consumidores permanecem nas etapas AE.5–AE.8.
+[Acesso View/default da pipeline email e bloqueios de descarte da base implementados e validados localmente](AE4_INSPECAO_E_DESCARTE.md). O workflow email-destroy e suas checagens próprias permanecem na AE.8. O rollout SMTP já pode ser conferido manualmente pelo procedimento dos manifestos. EmailFunction/egress SAM e alias/catálogo email/v1 foram preparados e validados localmente na [AE.5](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE5_EMAIL_FUNCTION.md). Consumidores, workflows e implantação permanecem nas AE.6–AE.10.
 
 Após completar o código e mediante autorização: aplicar o bootstrap aprovado, gerar/revisar o plano salvo da base por ambiente, aplicar somente o aprovado e conferir rollout SMTP/saúde dos targets. Depois da publicação da função, validar envio privado real com dados fictícios, ausência de exposição/relay e preservação do caminho HTTP API. Não usar saúde TCP como confirmação Captured. Não executar destroy como teste; atualizar seus bloqueios antes de utilizar a nova cadeia.

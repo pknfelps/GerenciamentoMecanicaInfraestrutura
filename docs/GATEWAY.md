@@ -1,13 +1,13 @@
 # Gateway REST
 
-Implementação local concluída em 12/10/2026; primeira aplicação e validação HTTP na AWS pendentes. A unidade `gateway/` pertence à infraestrutura e tem estado separado da base. Não depende de estado remoto de outro repositório.
+Base original implementada em 12/10/2026; evidências AWS anteriores pertencem ao contrato antigo. **AE.8, 22/10/2026:** duas rotas de autenticação por código preparadas/validadas localmente; implantação coordenada continua pendente. A unidade `gateway/` pertence à infraestrutura e tem estado separado da base. Não depende de estado remoto de outro repositório.
 
 ## Pré-requisitos e sequência
 
 1. Revisar e aplicar o plano salvo do bootstrap: permissões Gateway hom/prd, role regional de logs e service-linked role.
 2. Publicar os workflows na branch padrão `main` pelo fluxo normal de PR. Conferir `AWS_GATEWAY_ROLE_ARN` nos Environments hom/prd e a proteção de hom-approval/prd-approval.
 3. Executar base-provision e revisar seu plano: SG reservado Gateway, saída TCP 80 ao SG NLB, ingresso correspondente no NLB e novo parâmetro SSM. Não substituir VPC, EKS ou NLB.
-4. Provisionar banco e concluir o Job; publicar e implantar API e autenticação.
+4. Provisionar banco/Job e email (após base com SMTP4dev) independentemente; depois publicar e implantar API e autenticação com os contratos novos.
 5. Executar gateway-provision em develop/hom, informando os dois commits completos dos contratos publicados. Após a conferência, repetir em main/prd quando autorizado.
 
 A base fornece a rede e o NLB. A API fornece seu OpenAPI publicado; estar saudável não é requisito de criação do Gateway, mas é necessário para responder às chamadas. A autenticação precisa estar implantada, pois o Terraform lê sua versão numérica pelo SSM e cria a permissão de invocação dessa versão. O banco é uma dependência dos backends, não uma dependência Terraform direta do Gateway.
@@ -27,7 +27,7 @@ REST API Regional `mecanica-<ambiente>-gateway`, stage hom/prd e URL HTTPS públ
 Terraform compõe a definição de roteamento em `gateway/contracts.tf` usando jsondecode/jsonencode, sem construir arquivo por script. A projeção preserva os caminhos, métodos, parâmetros de caminho e descrições de respostas. Os schemas/modelos e a descrição Bearer continuam nos contratos originais; o importador REST da AWS não aceita o esquema HTTP Bearer. A projeção não configura validação de corpo ou authorizer no Gateway: a API continua validando JWT e aplicando suas permissões atuais.
 
 - Rotas da API: HTTP_PROXY, método correspondente, URI HTTP privada explícita e parâmetros de caminho mapeados. Corpo, query, Authorization e respostas passam ao backend.
-- POST /customers/validate: AWS_PROXY para a versão numérica publicada da Lambda, sem alias live ou $LATEST.
+- POST /customers/auth/request-code e POST /customers/auth/verify-code: AWS_PROXY para a versão numérica publicada da AuthFunction, sem alias live ou $LATEST. O OpenAPI auth deve ser 2.0.0 e conter exatamente essas operações. Duas permissões limitam invocação ao stage/método/caminho exatos. customers/validate sai do roteamento e sua permissão antiga será removida no plano. EmailFunction não é exposta pelo Gateway.
 - /health/live, /health/startup e /health/ready ficam fora da entrada pública. Não há ANY ou rota genérica `{proxy+}`.
 
 O import usa overwrite e fail_on_warnings. O deployment muda pelo hash da definição e dos contratos, com create_before_destroy. O tráfego externo usa HTTPS; o trecho privado usa HTTP na porta 80. Conferir no primeiro deploy que o stage não aparece no caminho recebido pela API.
@@ -42,7 +42,7 @@ Access log JSON em `/aws/apigateway/mecanica-<ambiente>-gateway`, retenção de 
 
 Antes dos PRs: fmt/validate nas unidades base/bootstrap/Gateway, actionlint/ShellCheck, renderização Kubernetes e composição Terraform com contratos publicados. Conferir policies e isolamento hom/prd com ferramentas AWS padrão. Não criar scripts operacionais de teste.
 
-Após provisionar hom: conferir VPC Link AVAILABLE, targets NLB saudáveis, stage/SSM e logs. Exercitar documento inválido → 400, cliente ausente → 401 e cliente elegível → 200. Usar o JWT somente em memória para verificar assinatura/compatibilidade na API, sem imprimir documento/token. Uma resposta 403 em rota de Admin pode demonstrar a role Customer atual; não alterar autorização de negócio para contornar isso. E3/E2.12 permanecem abertas até comprovação real das integrações.
+Após provisionar hom: conferir VPC Link AVAILABLE, targets NLB saudáveis, stage/SSM e logs. Exercitar request-code inválido → 400, pedido genérico → 202 sem código na resposta, leitura privada no SMTP4dev, verify-code inválido → 401 e confirmação elegível → 200 com JWT. Cliente inexistente/Inactive não produz desafio ou mensagem, mas mantém 202 genérico no pedido. Usar o JWT somente em memória para verificar assinatura/compatibilidade na API, sem imprimir documento/token. Uma resposta 403 em rota de Admin pode demonstrar a role Customer atual; não alterar autorização de negócio para contornar isso. E3/E2.12 permanecem abertas até comprovação real das integrações.
 
 ## Descarte
 
@@ -140,3 +140,11 @@ O bootstrap já declara a service-linked role `AWSServiceRoleForAPIGateway`, do 
 Na autenticação, `XRayEnabled` é independente de `TelemetryEnabled`: false usa PassThrough; true usa Active. Uma nova versão numérica precisa ser consumida em nova execução gateway-provision, pois a integração não acompanha o alias live. Ativar somente o Gateway não ativa os providers OpenTelemetry nem conecta os dois caminhos de traces.
 
 Sequência futura: revisar/aprovar/aplicar plano salvo do bootstrap → auth-publish de revisão nova → auth-provision com as duas opções explícitas → plano/aprovação/apply Gateway → conferir segmentos nativos com dados fictícios. Os segmentos nativos AWS não passam pela sanitização da aplicação; revisar seu conteúdo antes de uso normal. Correlação W3C/X-Ray, coleta CloudWatch, New Relic e comprovação real de amostragem/ausência de duplicação continuam pendentes. Esta entrega é local, sem plano AWS, aplicação ou ativação; E5.3/E5.14 permanecem abertas.
+
+## AE.8 — conferência local e sequência
+
+[Procedimento auth/email e Gateway](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE8_WORKFLOWS_E_GATEWAY.md). Gateway renderizado com os contratos locais reais: 27 caminhos em hom/prd, duas rotas AWS_PROXY, sem rota antiga/probes/Authorizer. Terraform fmt, init sem backend/lockfile readonly e validate aprovados. Permissões AWS e recursos reais não foram consultados/modificados.
+
+O campo auth/v2/auth-contracts-version=1.0.0 continua identificando o pacote JWT compartilhado. A versão HTTP auth é info.version=2.0.0; não trocar uma pela outra. O contrato imutável publicado deve corresponder ao artifact_commit implantado. Gateway mantém os workflows existentes e plan → aprovação → apply exclusivo do plano salvo. Atualização da versão numérica auth exige nova execução desse fluxo.
+
+Ordem: bootstrap aprovado/aplicado → base/SMTP4dev → banco/Job e email → API/auth → Gateway. Descarte: Gateway → API/auth → banco/email → base. Nenhum plano, apply ou destroy foi executado nesta preparação. Postman/diagramas/roteiro conjunto seguem na AE.9; publicação AWS na AE.10.
