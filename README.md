@@ -110,3 +110,9 @@ AE.4: [IAM do envio preparado e validado localmente](docs/AE4_IAM_EMAIL.md), com
 Bootstrap completa a autorização de contracts/email/*, leitura das duas chaves email/v1 nas pipelines API/auth e ref develop/hom ou main/prd da trust email. Apply dessas permissões e cadastro de AWS_EMAIL_ROLE_ARN nos Environments dependem de execução posterior autorizada; não foram realizados nesta implementação. Roles separadas compartilham subject de Environment, sem isolamento IAM por arquivo workflow.
 
 Provisionar: bootstrap/base com SMTP4dev → banco e email → API/auth → Gateway. Descartar: Gateway → API/auth → banco/email → base. Email-destroy exige API/auth removidas; base-destroy já exige banco/email. Ver [Gateway](docs/GATEWAY.md) e [bloqueios da base](docs/AE4_INSPECAO_E_DESCARTE.md). Os workflows da infraestrutura preservam planos salvos/aprovações; não foram executados. Próxima etapa local AE.9; comprovação AWS AE.10.
+
+## Extra AE.9 — validação local e documentos, 23/10/2026
+
+[Registro conjunto e roteiro AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE9_VALIDACAO_LOCAL_E_DOCUMENTACAO.md). Postman/contratos/diagramas atualizados; captura real por SDK/SAM/SMTP4dev, código/JWT e operações Customer da API conferidos localmente. Falha SMTP preservou OS; perda da caixa exigiu novo pedido, sem relay/dados sensíveis em logs. Docker exclusivo do ensaio removido; sem AWS ou workflow remoto.
+
+Bootstrap/base/Gateway/New Relic passaram fmt, init/validate com backend desabilitado e TF_DATA_DIR isolado; Kustomize e actionlint/ShellCheck aprovados. Não foram alterados Terraform, manifestos, policies, workflows, Collector ou dashboards nesta etapa. IAM/NLB/SG/capacidade/cold start reais e publicação do novo fluxo permanecem na AE.10 autorizada.

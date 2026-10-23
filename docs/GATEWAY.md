@@ -148,3 +148,7 @@ Sequência futura: revisar/aprovar/aplicar plano salvo do bootstrap → auth-pub
 O campo auth/v2/auth-contracts-version=1.0.0 continua identificando o pacote JWT compartilhado. A versão HTTP auth é info.version=2.0.0; não trocar uma pela outra. O contrato imutável publicado deve corresponder ao artifact_commit implantado. Gateway mantém os workflows existentes e plan → aprovação → apply exclusivo do plano salvo. Atualização da versão numérica auth exige nova execução desse fluxo.
 
 Ordem: bootstrap aprovado/aplicado → base/SMTP4dev → banco/Job e email → API/auth → Gateway. Descarte: Gateway → API/auth → banco/email → base. Nenhum plano, apply ou destroy foi executado nesta preparação. Postman/diagramas/roteiro conjunto seguem na AE.9; publicação AWS na AE.10.
+
+## AE.9 — contrato documental consolidado
+
+23/10/2026: [Postman, contratos, diagramas e conferência conjunta local](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE9_VALIDACAO_LOCAL_E_DOCUMENTACAO.md) concluídos. Os endpoints atuais preparados são request-code e verify-code; a rota antiga nos registros datados acima representa a implantação anterior. Gateway real e permissões de invocação ainda não foram comprovados para o contrato novo. Sem plano/apply nesta etapa.

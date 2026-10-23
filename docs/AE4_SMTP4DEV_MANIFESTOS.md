@@ -35,7 +35,7 @@ O JSON fixa relay sem servidor, destinatários automáticos, expressão ou crede
 - Startup e liveness conferem HTTP `/`; readiness confere TCP SMTP. Essas probes verificam o processo/listener, sem afirmar captura persistente ou entrega externa.
 - `DeliverToStdout` vazio e filtro Serilog permitem somente templates técnicos fixos de versão/inicialização/encerramento sem exceção. Destinatários, conteúdo, comandos SMTP e stack traces do fornecedor não são encaminhados ao stdout. O filtro também reduz diagnósticos do fornecedor; em falha de inicialização, conferir estado/exit code/probes e configuração versionada, sem remover o filtro em ambiente com mensagens.
 
-A caixa e os registros de sessão na interface contêm intencionalmente o conteúdo recebido. A sanitização do stdout não os torna públicos ou inofensivos. ClusterIP/NodePort não são isolamento entre pods; não foi criada NetworkPolicy. A restrição do caminho Lambda por SG ainda será implementada. SMTP4dev não recebe credenciais AWS, de banco ou JWT.
+A caixa e os registros de sessão na interface contêm intencionalmente o conteúdo recebido. A sanitização do stdout não os torna públicos ou inofensivos. ClusterIP/NodePort não são isolamento entre pods; não foi criada NetworkPolicy. A restrição do caminho Lambda por SG já está preparada em AE4_REDE_SMTP.md; sua aplicação/conferência AWS permanece na AE.10. SMTP4dev não recebe credenciais AWS, de banco ou JWT.
 
 ## Acesso operacional após implantação autorizada
 
@@ -71,3 +71,5 @@ Essas evidências não comprovam scheduling, regras SG, NLB/health checks, acess
 [Listener/target group/ASG attachment SMTP, SG reservado/regras mínimas e metadados SMTP/SG foram preparados e validados localmente](AE4_REDE_SMTP.md). [Associação de leitura para inspeção da pipeline email e bloqueios base-destroy preparados e validados localmente](AE4_INSPECAO_E_DESCARTE.md). O workflow email-destroy será criado na AE.8. Depois, preparar/publicar EmailFunction e consumidores conforme AE.5–AE.8. Planos/apply e comprovação na AWS dependem de autorização posterior.
 
 Referências da imagem fixada: [opções de configuração](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/appsettings.json), [inicialização/logger](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/Program.cs) e [armazenamento em memória](https://github.com/rnwood/smtp4dev/blob/3.15.0/Rnwood.Smtp4dev/Startup.cs).
+
+AE.9 (23/10/2026): falha SMTP, perda da caixa e novo pedido conferidos junto dos consumidores localmente, sem alteração dos manifestos ou recursos AWS. [Resultados](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE9_VALIDACAO_LOCAL_E_DOCUMENTACAO.md).
