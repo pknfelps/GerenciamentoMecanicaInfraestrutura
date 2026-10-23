@@ -9,3 +9,9 @@ SG NLB aceita TCP 80 somente do SG reservado mecanica-<ambiente>-gateway; egress
 SSM base/v2 publica ARN/DNS/SG/target group/porta/protocolo/URI. Terraform é o único proprietário AWS; não usar Service LoadBalancer, Helm ou controller na operação normal. Antes da migração, seguir [limpeza legada](MIGRACAO_DECLARATIVA.md).
 
 Após deploy API, usar comandos AWS padrão para conferir targets e `kubectl port-forward service/svc-gerenciamento-api 8080:80`, seguido de `curl http://localhost:8080/health/ready`, para diagnóstico do serviço. Port-forward valida a aplicação; validação NLB exige o caminho privado/Gateway e saúde dos targets. Descarte Terraform remove associação, listener, NLB e target group antes da rede/EKS conforme dependências.
+
+## Listener SMTP — AE.4 preparado localmente
+
+`terraform/smtp-network.tf` reutiliza aws_lb.api e o mesmo ASG com listener TCP 2525, target group mecanica-<ambiente>-smtp em instance/30025 e health check TCP. O Service SMTP4dev encaminha NodePort 30025 ao container 2525. SG NLB aceita essa entrada somente do SG reservado mecanica-<ambiente>-email e tem egress 30025 ao SG EKS; este recebe regra da mesma porta com origem SG NLB. O SG email será usado pelo SAM, que administrará seu egress. Não há listener web/público nem CIDR de conveniência.
+
+Listener/target group/health check/attachment HTTP da API permanecem intactos. A descrição histórica do SG NLB foi preservada; passa a haver também o caminho SMTP, sem substituir o NLB. A interface SMTP4dev permanece ClusterIP/port-forward. [Recursos, proprietários, metadados e validação](AE4_REDE_SMTP.md). Rede preparada no código; conectividade/saúde AWS ainda não comprovadas. Aplicação depende de plano salvo aprovado, e uso pela função depende das etapas SAM/envio.

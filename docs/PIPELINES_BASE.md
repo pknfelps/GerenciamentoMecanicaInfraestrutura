@@ -22,13 +22,13 @@ Gateway fica separado da base: gateway-provision/gateway-destroy manuais, com en
 
 base-provision sempre exige Secret persistente do ambiente com AWSCURRENT (inspeção antes do plan e novamente antes do apply), aplica kubernetes/observability/<ambiente> e mantém restart/rollout e apply exclusivo do plano aprovado. Sem input de ativação/destino. base-destroy remove o mesmo overlay; CI renderiza hom/prd; a validação nativa do YAML é uma conferência local, sem novo step de workflow. [Procedimento completo](NEW_RELIC.md).
 
-## Bloqueios de dependência no destroy — 17/10/2026
+## Bloqueios de dependência no destroy — atualização AE.4 em 22/10/2026
 
-base-destroy consulta somente sua dependência direta, o banco, antes do plan e novamente no apply, antes de excluir Collector/manifestos. Exige ausência de RDS, DB subnet group e SG do banco, inclusive recursos em exclusão. Não repete as consultas de API/auth/Gateway: database-destroy verifica API/auth, e os destroys de API/auth verificam Gateway.
+base-destroy consulta suas dependências diretas, banco e email, antes do plan e novamente no apply, antes de excluir Collector/SMTP4dev/manifestos. Exige ausência de RDS, DB subnet group e SG do banco, inclusive recursos em exclusão. Para email, exige função ausente e nenhum resíduo de ENI/egress no SG reservado; o SG isolado é permitido, pois pertence à base. Não repete as consultas de API/auth/Gateway: database-destroy verifica API/auth, e os destroys de API/auth verificam Gateway. O futuro email-destroy também verificará seus consumidores na AE.8.
 
-O job plan da base não precisa de kubectl para essa checagem. O job apply preserva kubectl para remover seus próprios manifestos depois de checar o banco. Esta entrega não recupera automaticamente Terraform/Kubernetes quando EKS/SSM já foram removidos.
+O job plan da base não precisa de kubectl para essa checagem. O job apply preserva kubectl para remover seus próprios manifestos depois de checar banco e email. Esta entrega não recupera automaticamente Terraform/Kubernetes quando EKS/SSM já foram removidos.
 
-Todas as checagens usam set -euo pipefail, JSON, paginação automática e nomes exatos hom/prd. Consulta negada, falha de rede ou parsing inválido interrompe o fluxo, sem inferir ausência. Recursos do banco em exclusão continuam bloqueando. Nenhuma espera automática ou rollback; concluir database-destroy antes de repetir.
+Todas as checagens usam set -euo pipefail, JSON, paginação automática e nomes exatos hom/prd. Consulta negada, falha de rede ou parsing inválido interrompe o fluxo, sem inferir ausência. Recursos do banco em exclusão continuam bloqueando. Nenhuma espera automática ou rollback; concluir database-destroy e, quando houver EmailFunction implantada, email-destroy/liberação da rede antes de repetir.
 
 Publicação: revisar/aplicar plano adicional do bootstrap, aplicar base com associação AmazonEKSViewPolicy em default para database, publicar os workflows e então usá-los. Preservados revisão/aprovação, artefatos, mesma revisão e apply do plano salvo. gateway-destroy não muda. Não ler estados externos, gravar prontidão no SSM nem executar destroy como teste desta implementação.
 
@@ -49,3 +49,9 @@ Os overlays montam os dois YAMLs públicos; uma alteração isolada de ConfigMap
 ## Workflow compartilhado New Relic — 18/10/2026
 
 newrelic-provision é independente da base/Gateway e não entra na cadeia de deploy/destroy dos ambientes. Manual somente main, sem seleção hom/prd, fila newrelic-dashboards; plan salvo → aprovação em Environment sem credenciais → apply do mesmo SHA/artefato por ID → conferência sem segundo apply. Administra os três dashboards persistentes, não recursos AWS. Bootstrap adicional e Environments protegidos devem existir antes do primeiro dispatch. [Procedimento](../observability/newrelic/README.md#publicação-padrão-pelo-github-actions). CI valida/renderiza esta unidade sem chave real/OIDC. Preparado localmente, não executado; a alternativa Terraform local usa o mesmo backend e não deve rodar em paralelo.
+
+## Inspeção e descarte email — AE.4, 22/10/2026
+
+[Registro local](AE4_INSPECAO_E_DESCARTE.md): a base associa ViewPolicy/default à role email preparada no bootstrap e acrescenta Check email removal nos jobs plan/apply do base-destroy. Bootstrap passa a autorizar ListFunctions regional para confirmar ausência pelo array JSON; filtros do workflow usam nome exato do ambiente. Aplicar o bootstrap revisado antes de usar esse workflow. Falha de consulta, função existente, ENIs ou egress pendentes bloqueiam sem executar limpeza/replan. SG isolado não bloqueia. A checagem do banco e aprovações permanecem intactas. Validado com Terraform/actionlint/ShellCheck, sem execução AWS.
+
+Email-destroy, suas checagens API/auth e a conferência final de rede serão implementados junto dos workflows email na AE.8. Isso não adiciona dependência de email ao database-destroy nem exige retirar o banco antes da função de envio.

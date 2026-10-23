@@ -1,70 +1,118 @@
-# Gerenciamento Mecanica — Infraestrutura
+# Gerenciamento Mecânica — Infraestrutura
 
-AWS deste repositório em Terraform; Service e namespace em manifestos Kubernetes próprios. Auth usa SAM/CloudFormation com ZIP ([ADR 009](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/009-SAM-AUTENTICACAO.md)), template/workflows implantados e fluxo validado em hom. Bootstrap/base/banco/Gateway permanecem Terraform, incluindo IAM runtime/CI persistentes. Sem wrappers/publicadores/controller. [Decisão](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/adrs/008-INFRAESTRUTURA-DECLARATIVA.md).
+Infraestrutura AWS em Terraform, manifestos Kubernetes e configuração do New Relic para o sistema de gerenciamento de oficina. **Estado em 21/10/2026:** hom implantado, validado e depois destruído pelo mantenedor. E5/E6 encerradas no escopo acordado, sem comprovação de prd, coexistência, carga, rollback ou concorrência de publicação. [Encerramento e custos](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/ENCERRAMENTO_E6_E_CUSTOS_2026-10-21.md).
 
-| Unidade | Conteúdo |
+## Unidades e arquitetura
+
+| Diretório | Responsabilidade |
 |---|---|
-| bootstrap | S3 estado/artefatos, ECR, OIDC, role/policy persistente auth-runtime e permissões das pipelines |
-| terraform | VPC/subnets/NAT/EKS, add-ons, acessos, SGs, NLB/ASG, JWT/Pod Identity da API e SSM v2 |
-| kubernetes | Service NodePort e namespace database-init; Collector New Relic e coleta Kubernetes em Kustomization independente |
-| gateway | REST API Regional, VPC Link V2, integrações API/Lambda, logs e SSM próprios |
-| observability/newrelic | Dashboards persistentes de operação, OS e integrações/autenticação, JSON versionado/Terraform com publicação manual via workflow; independentes dos destroys AWS |
+| bootstrap | Backend S3, artefatos, ECR, OIDC, IAM persistente das pipelines/autenticação e metadados dos Secrets de observabilidade |
+| terraform | VPC/subnets, NAT, EKS/add-ons/acessos, SGs, NLB/ASG, JWT/Pod Identity da API, identidade do Collector e catálogo SSM base v2 |
+| kubernetes | Service da API, namespace database-init, SMTP4dev efêmero e Kustomizations independentes do Collector |
+| gateway | REST API Regional, VPC Link V2, integrações HTTP/Lambda, access logs e catálogo SSM Gateway v2 |
+| observability/newrelic | Três dashboards, cinco alertas e notificações, com estado persistente independente do destroy AWS |
 
-Hom/develop e prd/main: uma VPC/EKS independente, um nó t3.small 1/1/1. Metrics Server e Pod Identity Agent; EBS CSI removido por falta de uso. RDS pertence ao repositório do banco; Gateway tem unidade e workflows separados; implantação e validação HTTP comprovadas em hom em 17/10/2026; prd não validado.
+O [banco](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados) administra RDS/SQL/Job. A [API](https://github.com/pknfelps/GerenciamentoMecanicaSistema) administra seu Deployment/HPA/ServiceAccount. A [autenticação](https://github.com/pknfelps/GerenciamentoMecanicaServerless) usa SAM/CloudFormation e ZIP; sua role runtime é persistente no bootstrap.
 
-CI: `terraform fmt -check`, `init -backend=false`, `validate`, renderização das Kustomizations da base/Collector. Não executa testes de Collectors ou conexão New Relic. Não há testes operacionais próprios; testes de negócio vivem nos repositórios das aplicações.
+Gateway público HTTPS → VPC Link → NLB interno HTTP/80 → NodePort/30080 → API/8080. A outra integração chama uma versão numérica da Lambda. API, Lambda e RDS usam rede privada; NAT atende saídas necessárias. Endpoint administrativo EKS e endpoint público Gateway têm finalidades distintas. [Diagrama completo e limites de rede](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/diagramas/COMPONENTES.md).
 
-Provisionamento/destroy das unidades Terraform somente manuais: plan salvo → aprovação hom-approval/prd-approval → apply do mesmo artefato/commit. Nenhum apply por push ou replan após aprovação. O mantenedor deve coordenar alterações sequenciais por ambiente e gerar novo plano dos consumidores quando mudar uma dependência.
+Hom/develop e prd/main têm configurações separadas, uma VPC/EKS por ambiente, um nó t3.small (mínimo/desejado/máximo 1). HPA da API permite 1–3 réplicas, sem ampliar nós ou garantir alta disponibilidade. Metrics Server e Pod Identity Agent estão previstos; não há EBS CSI em uso. EKS, NLB e identidade do Collector pertencem à base, RDS ao banco, regras de saída da autenticação ao SAM.
 
-- [Workflows e operação](docs/PIPELINES_BASE.md)
-- [Gateway REST](docs/GATEWAY.md)
-- [NLB interno](docs/NLB_INTERNO.md)
-- [SSM v2](docs/METADADOS_BASE.md)
-- [JWT compartilhado](docs/JWT_COMPARTILHADO.md)
-- [Permissões do runtime da API](docs/API_RUNTIME.md)
-- [Migração e validação](docs/MIGRACAO_DECLARATIVA.md)
+## Ferramentas e validação local
+
+Terraform 1.15.9; providers AWS 6.58.0 e random 3.7.2 conforme lockfiles. New Relic usa provider 3.99.3. Há versões de ferramentas adicionais fixadas nos workflows; não atualizar lockfiles apenas para revisar documentação.
+
+```bash
+terraform -chdir=bootstrap fmt -check
+terraform -chdir=bootstrap init -backend=false
+terraform -chdir=bootstrap validate
+terraform -chdir=terraform fmt -check
+terraform -chdir=terraform init -backend=false
+terraform -chdir=terraform validate
+terraform -chdir=gateway fmt -check
+terraform -chdir=gateway init -backend=false
+terraform -chdir=gateway validate
+kubectl kustomize kubernetes
+kubectl kustomize kubernetes/observability/hom
+kubectl kustomize kubernetes/observability/prd
+```
+
+Esses comandos validam configuração; não aplicam recursos nem substituem plano AWS. Não há executável de aplicação, Dockerfile, Swagger ou Postman próprios neste repositório. Os Collectors usam imagens/layer oficiais; o contrato HTTP e as coleções pertencem aos repositórios das aplicações.
+
+## Pipelines e operação
+
+| Workflow | Função |
+|---|---|
+| ci | Validação Terraform sem backend, Kustomize e unidade New Relic sem credenciais reais |
+| aws-oidc-check | Conferência manual de identidade OIDC |
+| base-provision / base-destroy | Plano salvo → aprovação protegida → apply exclusivo do plano aprovado |
+| gateway-provision / gateway-destroy | Mesmo fluxo, para a unidade Gateway |
+| newrelic-provision | Manual, somente main, plano → aprovação → apply dos dashboards/alertas persistentes |
+
+OIDC identifica cada execução na conta 121754142617/us-east-1. Branches e Environments separam hom/prd. Um plano obsoleto exige execução completa e nova aprovação, sem replan automático. A diferença entre este fluxo manual e o requisito original R06 está registrada, com revisão adiada pelo mantenedor; não descrever como deploy automático por push.
+
+Provisionar bootstrap aprovado → base → banco/Job → API e autenticação → Gateway. API e autenticação precisam do banco e podem ser preparadas independentemente entre si. O Gateway deve consumir a versão numérica publicada pela autenticação. O catálogo SSM v2 fornece configuração, não sinal de prontidão; não há publicador `/api/v2/` no código entregue.
+
+Destruir Gateway → API e autenticação → banco/email → base; email entra na cadeia quando sua função e workflow forem publicados na AE.8. API/auth verificam Gateway; banco verifica API/auth e resíduos associados; base verifica banco e email (função, ENIs e egress no SG reservado). Base/banco repetem as verificações antes do plan e do apply. Recursos ainda em exclusão e falhas de consulta bloqueiam; não há espera por ENIs, remoção automática de finalizadores ou coordenação entre execuções concorrentes. [Mapa de descarte](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/DESTRUICAO_AMBIENTE.md).
+
+base-provision aplica o Collector separadamente da Kustomization raiz, reinicia e aguarda rollout por 300 segundos. base-destroy remove o overlay do Collector antes dos demais manifestos e do Terraform. Atualizações isoladas do ConfigMap exigem restart.
+
+## Observabilidade vigente
+
+Collector Contrib 0.161.0 em observability, uma réplica/Recreate, requests 100m/128Mi e limits 500m/256Mi, GOMEMLIMIT 192MiB. Executa sem root, filesystem somente leitura, token Kubernetes apenas no pod para RBAC de leitura. Recebe OTLP HTTP/4318 por Service interno; isso não constitui isolamento entre pods por NetworkPolicy. Probes/13133 verificam o processo, não a entrega ao destino externo.
+
+- Traces, métricas técnicas/de negócio/integrações e logs sanitizados da API seguem ao New Relic US. Enriquecimento Kubernetes preserva serviço/versão/ambiente.
+- 23 métricas Kubernetes a cada 30 segundos: nós, pods, containers e disponibilidade. Kubeletstats acompanha somente o nó do Collector; mudança permanente de topologia exige revisão.
+- 13 estatísticas CloudWatch Gateway/Lambda/RDS: período/coleta de 60 segundos, atraso de dez minutos. Logs do Gateway retomam os últimos cinco minutos a cada inicialização, sem checkpoint persistente ou deduplicação. Lacunas/duplicações são aceitas.
+- A Lambda tem Collector próprio como extensão; não envia seus sinais ao Collector EKS.
+- Aplicações usam propagação W3C. X-Ray nativo é independente, com integração por polling no New Relic, sem união automática entre os dois caminhos. Gateway hom solicita X-Ray; prd mantém false. Segmentos nativos não passam pela sanitização da aplicação.
+
+A License Key de ingestão fica no Secrets Manager, lida pelo provider nativo alpha dos Collectors. Não está no código, estado Terraform, GitHub Secret, variável Lambda ou Kubernetes Secret. Pod Identity identifica o Collector; a extensão compartilha a role da Lambda. Mudanças da chave exigem reinicializar o Collector e publicar nova revisão da função.
+
+E5 encerrada por aceite em hom: ingestão, métricas, logs, SQL, ciclo Lambda e três alertas foram conferidos conforme [evidências e dispensas](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/ENCERRAMENTO_E5_2026-10-21.md). Não foram feitos disparos de CPU/memória nem carga. Não tratar limites aceitos como comprovação desses cenários.
+
+## Dashboards e alertas persistentes
+
+A unidade [observability/newrelic](observability/newrelic/README.md) administra os dashboards **Operação da API e Kubernetes**, **Ordens de serviço** e **Integrações e autenticação**, com filtro hom/prd. Cinco alertas: falha técnica de OS, falha de notificação, CPU sobre alocável >80%, working set sobre alocável >85% e API sem réplica disponível. Condições separadas hom/prd; ausência de sinal encerra sem comprovar recuperação. A disponibilidade inclui escala intencional para zero; manutenção exige silenciamento manual.
+
+newrelic-provision usa Environments newrelic/newrelic-approval, User API Key e variável NEW_RELIC_ALERT_EMAIL, sem imprimir destinatário. A User API Key administra recursos e não substitui a License Key de ingestão. Backend compartilhado shared/newrelic/terraform.tfstate, locking, workspace default e proteção prevent_destroy. Os dashboards/alertas já foram publicados e conferidos; persistem após descartar o ambiente AWS. Não executar Terraform local em concorrência com a pipeline.
+
+O encerramento preserva bootstrap, buckets/artefatos, ECR, IAM, Secrets e New Relic. O relatório de custos distingue recursos descartados de resíduos históricos e consumo estimado; ausência de workloads não significa custo futuro zero.
+
+## Procedimentos e contratos
+
 - [Bootstrap administrativo](bootstrap/README.md)
+- [Workflows da base](docs/PIPELINES_BASE.md)
+- [Gateway e contrato público](docs/GATEWAY.md)
+- [NLB interno](docs/NLB_INTERNO.md)
+- [Catálogo base SSM v2](docs/METADADOS_BASE.md)
+- [JWT compartilhado](docs/JWT_COMPARTILHADO.md)
+- [Runtime da API](docs/API_RUNTIME.md)
+- [Collector e Kubernetes](docs/COLLECTOR_API.md)
+- [CloudWatch](docs/CLOUDWATCH.md)
+- [New Relic e rotação](docs/NEW_RELIC.md)
+- [Contratos entre repositórios](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/CONTRATOS_ENTRE_REPOSITORIOS.md)
+- [Revisão documental E7](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/REVISAO_DOCUMENTACAO_E7_2026-10-21.md)
 
-Implementação local preparada; a migração AWS exige revisão/aprovação dos planos. Não descartar recursos para testar esta reformulação.
+O endpoint Gateway é publicado por ambiente no catálogo e resumo do provisionamento. Como o ambiente foi destruído, URLs de validações anteriores são evidências históricas, não um deploy ativo. Nenhum novo recurso foi criado para esta revisão documental.
 
-Parte 6 da autenticacao: bootstrap prepara role CI de leitura exclusiva do pacote 1.0.0. Aplicacao exige plano salvo aprovado; workflows da funcao usam publicacao separada e provisionamento/destroy SAM manuais sem aprovacao intermediaria. sam delete remove ZIP atual/templates operacionais e preserva contratos, outras revisoes, bucket e IAM persistente. Consulte [bootstrap](bootstrap/README.md) e [procedimento auth](https://github.com/pknfelps/GerenciamentoMecanicaAutenticacao/blob/develop/docs/DEPLOY.md).
 
-## Collector da API e Kubernetes — E5
+## Extra planejado — autenticação e captura SMTP
 
-Collector Kubernetes administrado pela infraestrutura em kubernetes/observability/base, com overlays hom/prd. base-provision sempre aplica o overlay do ambiente, reinicia e aguarda rollout; base-destroy remove o mesmo overlay antes do EKS. O destino de produção é sempre New Relic; credencial no Secrets Manager e bootstrap aplicado são pré-requisitos. A API envia ao endpoint OTLP interno e mantém sua ativação no manifesto (hom habilitado; prd ainda conforme sua configuração versionada). Não há chave New Relic na aplicação.
+Decisão de 22/10/2026, ainda sem implantação: SMTP4dev privado/efêmero no EKS, sem relay externo, com envio centralizado em EmailFunction invocada por API/auth. O cliente solicita/confirma o código e recebe JWT Customer; sem Authorizer ou token por OS. O repositório já renomeado GerenciamentoMecanicaServerless reunirá as funções, com dois SAM/stacks e workflows independentes/reutilizáveis. A migração inclui OIDC, rotas/permissões Gateway, catálogo de envio e novos bloqueios: email exige API/auth removidas; base exige banco e email ausentes. A ordem operacional atual só muda quando essa implementação for publicada. [Escopo de infraestrutura](docs/AUTENTICACAO_E_EMAIL_PLANEJADO.md) · [Plano AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md). Checklists oficiais preservados.
 
-Métricas de nós/pods/containers e disponibilidade, enriquecimento Kubernetes e RBAC somente leitura implantados e comprovados em hom em 17/10/2026: 23 métricas no New Relic, comparação com kubectl top/estado e sinais da API enriquecidos sem alterar serviço/versão/correlação. Collector Ready, zero reinícios, cerca de 2m CPU/55–56 MiB. Coleta a cada 30 segundos, TLS verificado e cobertura kubelet de um nó. E5.4/E5.12 comprovadas em hom; prd/carga continuam pendentes. [Métricas, permissões, NRQL e conferência](docs/COLLECTOR_API.md).
+AE.4: [IAM do envio preparado e validado localmente](docs/AE4_IAM_EMAIL.md), com roles próprias email e consumo restrito por API/auth. [Manifestos SMTP4dev e captura efêmera validados localmente](docs/AE4_SMTP4DEV_MANIFESTOS.md), incluídos na raiz Kubernetes. [Rede privada SMTP e chaves SSM preparadas e validadas localmente](docs/AE4_REDE_SMTP.md), reutilizando NLB/ASG existentes. [Inspeção View/default e bloqueio base-destroy por email preparados e validados localmente](docs/AE4_INSPECAO_E_DESCARTE.md). Preparação local AE.4 concluída; aplicação e comprovação AWS pendentes. [EmailFunction preparada e validada localmente na AE.5](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE5_EMAIL_FUNCTION.md); workflow próprio de descarte segue na AE.8; nenhum plano/apply AWS nesta preparação.
 
-## X-Ray nativo — E5
+## Extra AE.8 — workflows das duas funções e Gateway
 
-O [Gateway](docs/GATEWAY.md) mantém `xray_tracing_enabled=false` como padrão Terraform; o tfvars hom define true para a validação AWS e prd continua false; seus logs de acesso incluem somente o identificador técnico adicional xrayTraceId. O [bootstrap](bootstrap/README.md) prepara escrita X-Ray regional para as roles runtime auth e leitura da versão exata da layer Collector pelas pipelines auth. Service-linked role Gateway e permissões CI/Secrets são preservadas. Controles independentes do OpenTelemetry. Permissões aplicadas e ingestão nativa em hom comprovada em 17/10/2026. A correlação W3C/X-Ray continua pendente; segmentos nativos podem conter URL/IP.
+[Preparação local concluída em 22/10/2026](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE8_WORKFLOWS_E_GATEWAY.md): auth/email têm entradas independentes e quatro reutilizáveis nativos; artefatos/checksums/VersionId separados, alias email live e versão numérica auth. Gateway exige OpenAPI auth 2.0.0 e publica somente request-code/verify-code, com permissões específicas; sem Authorizer ou endpoint email público.
 
-## New Relic US — ingestão hom comprovada
+Bootstrap completa a autorização de contracts/email/*, leitura das duas chaves email/v1 nas pipelines API/auth e ref develop/hom ou main/prd da trust email. Apply dessas permissões e cadastro de AWS_EMAIL_ROLE_ARN nos Environments dependem de execução posterior autorizada; não foram realizados nesta implementação. Roles separadas compartilham subject de Environment, sem isolamento IAM por arquivo workflow.
 
-Os três sinais são enviados por OTLP com leitura nativa de Secret persistente. Não há toggle de destino nos workflows. Bootstrap/IAM e cadastro manual da chave de cada ambiente são pré-requisitos; a pipeline só inspeciona metadados. [Cadastro, sequência, rotação, testes e limites](docs/NEW_RELIC.md). Ingestão OTLP API/auth, versão da API pelo SHA e indicadores de negócio conferidos em hom; prd permanece pendente.
+Provisionar: bootstrap/base com SMTP4dev → banco e email → API/auth → Gateway. Descartar: Gateway → API/auth → banco/email → base. Email-destroy exige API/auth removidas; base-destroy já exige banco/email. Ver [Gateway](docs/GATEWAY.md) e [bloqueios da base](docs/AE4_INSPECAO_E_DESCARTE.md). Os workflows da infraestrutura preservam planos salvos/aprovações; não foram executados. Próxima etapa local AE.9; comprovação AWS AE.10.
 
-A integração nativa **X-Ray → New Relic** também está aplicada pelo bootstrap: role de leitura persistente, confiança na conta New Relic US com ExternalId obrigatório e restrição regional. Conexão manual mecanica-xray validada em hom, somente X-Ray/us-east-1. Não usa License Key/Collectors nem comprova correlação W3C. [Procedimento](docs/NEW_RELIC.md#x-ray-nativo--new-relic--preparação-declarativa).
+## Extra AE.9 — validação local e documentos, 23/10/2026
 
-## Bloqueios de destroy — 17/10/2026
+[Registro conjunto e roteiro AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE9_VALIDACAO_LOCAL_E_DOCUMENTACAO.md). Postman/contratos/diagramas atualizados; captura real por SDK/SAM/SMTP4dev, código/JWT e operações Customer da API conferidos localmente. Falha SMTP preservou OS; perda da caixa exigiu novo pedido, sem relay/dados sensíveis em logs. Docker exclusivo do ensaio removido; sem AWS ou workflow remoto.
 
-base-destroy verifica somente o banco antes do plan e novamente antes de remover qualquer manifesto ou aplicar o plano salvo. RDS em deleting, DB subnet group ou SG do banco bloqueiam imediatamente. API/auth são verificadas pelo database-destroy; Gateway é verificado pelos destroys de API/auth. Falhas de consulta bloqueiam. Gateway destroy permanece inalterado.
-
-O bootstrap prepara policies gerenciadas de inspeção para base/API/auth/banco hom/prd e a autorização da base para associar AmazonEKSViewPolicy à pipeline do banco somente em default. A base declara essa associação separada do acesso Edit em database-init. Aplicar bootstrap e base antes de usar os workflows novos. [Procedimento](docs/PIPELINES_BASE.md). Sem aplicação AWS nesta implementação.
-
-## Coleta CloudWatch — E5
-
-Preparada e validada localmente em 18/10/2026: logs de acesso do Gateway e 13 métricas essenciais Gateway/Lambda/RDS pelo Collector existente. Retomada dos últimos cinco minutos em cada inicialização, sem persistência ou deduplicação; consultas de métricas a cada minuto, com atraso de dez minutos. Terraform da base administra somente a policy adicional de leitura da role do Collector e sua descrição. Workflows/bootstrap/API/Lambda preservados. Após PRs, executar somente base-provision e conferir ingestão em hom; E5.14 permanece parcial. [Configuração, IAM, recuperação, NRQL e descarte](docs/CLOUDWATCH.md).
-
-## Dashboards como código — E5
-
-Unidade independente em [observability/newrelic](observability/newrelic/README.md): dashboards API/Kubernetes (20 consultas), Ordens de serviço (15) e Integrações/autenticação (24), dois blocos explicativos por dashboard e filtro hom/prd (padrão hom), provider New Relic 3.99.3 e estado S3 shared/newrelic/terraform.tfstate. Não participa de base-provision/base-destroy. O workflow manual newrelic-provision, somente main, prepara plano salvo → aprovação newrelic-approval → apply do mesmo plano. Environment newrelic guarda User API Key/Account ID e ARN da role OIDC restrita ao backend; a License Key de ingestão permanece exclusiva dos Collectors. CI valida/renderiza sem credenciais reais.
-
-Definição e consultas históricas validadas em 18/10/2026; publicação ainda não realizada. Plano remoto/aplicação exigem autorização posterior, sem necessidade de subir API/EKS para consultar o histórico retido. Estado/dashboard persistem nos descartes AWS; prevent_destroy habilitado. OS inclui volume diário em São Paulo, durações concluídas em minutos com amostras e falhas de processamento/medição. As 30 consultas hom/prd de OS foram conferidas com a janela histórica 18/10 00:22:30–00:49:40 UTC e a evidência SQL; prd sem dados não é comprovação operacional. Integrações/autenticação acrescenta os sinais existentes de login, Lambda, 13 métricas CloudWatch, notificações e logs técnicos limitados; 48 consultas hom/prd conferidas com evidências históricas, sem tráfego novo. A definição dos três dashboards está preparada, ainda sem publicação. Contadores completos por integração PostgreSQL/SSM/Secrets Manager, alertas e pendências X-Ray/logs continuam separados.
-
-### Publicação dos dashboards pelo workflow — 18/10/2026
-
-Workflow, role/policy do bootstrap e CI offline preparados/validados localmente. Antes da primeira execução: plano do bootstrap revisado/aprovado/aplicado → Environments newrelic/newrelic-approval protegidos e variáveis/Secret cadastrados → PR/main → newrelic-provision/revisão/aprovação. Fila compartilhada, workspace default, artefatos sete dias, apply somente plano salvo e conferência posterior sem reparo automático. Não houve execução remota, configuração de GitHub ou apply nesta entrega. [Preparação, credenciais e operação](observability/newrelic/README.md#publicação-padrão-pelo-github-actions). Não é necessário subir o ambiente; não executar alternativa local simultaneamente.
-
-### E5.8 — Acessos técnicos às integrações
-
-O dashboard Integrações e autenticação passa a incluir as métricas de operações PostgreSQL/SSM/Secrets Manager da API e autenticação. [Semântica, consultas e publicação](observability/newrelic/README.md#acessos-técnicos-postgresql-ssm-e-secrets-manager--e58). Sem alteração de IAM, Collector, workflows ou alertas; comprovação implantada pendente.
+Bootstrap/base/Gateway/New Relic passaram fmt, init/validate com backend desabilitado e TF_DATA_DIR isolado; Kustomize e actionlint/ShellCheck aprovados. Não foram alterados Terraform, manifestos, policies, workflows, Collector ou dashboards nesta etapa. IAM/NLB/SG/capacidade/cold start reais e publicação do novo fluxo permanecem na AE.10 autorizada.
