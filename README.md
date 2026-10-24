@@ -4,6 +4,26 @@ Infraestrutura AWS em Terraform, manifestos Kubernetes, Gateway, SMTP4dev privad
 
 ## Unidades e arquitetura
 
+~~~mermaid
+flowchart LR
+    CLIENT["Oficina / cliente"] -->|HTTPS| GW["Gateway REST"]
+    GW -->|versao numerica| AUTH["AuthFunction / repo Serverless"]
+    subgraph BASE["Rede e plataforma: este repositorio"]
+        GW --> VL["VPC Link V2"]
+        VL -->|HTTP 80| NLB["NLB interno"]
+        NLB -->|TCP 30080| SVC["Service API NodePort"]
+        NLB -->|TCP 30025| SMTPSVC["Service SMTP NodePort"]
+        SMTPSVC --> SMTP["SMTP4dev efemero"]
+        COL["Collector no EKS"]
+        PLATFORM["Kubernetes e CloudWatch"] --> COL
+    end
+    SVC --> API["Deployment API / repo Sistema"]
+    API -->|OTLP| COL
+    EMAIL["EmailFunction / repo Serverless"] -->|TCP 2525| NLB
+    COL -->|OTLP HTTPS| NR["New Relic"]
+    NRTF["Terraform dashboards e alertas"] -.->|configura| NR
+~~~
+
 | Diretório | Responsabilidade |
 |---|---|
 | bootstrap | Backend S3, artefatos, ECR, OIDC, IAM persistente das pipelines/autenticação e metadados dos Secrets de observabilidade |
@@ -16,7 +36,7 @@ O [banco](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados) administr
 
 Gateway público HTTPS → VPC Link → NLB interno HTTP/80 → NodePort/30080 → API/8080. A outra integração chama uma versão numérica da Lambda. API, Lambda e RDS usam rede privada; NAT atende saídas necessárias. Endpoint administrativo EKS e endpoint público Gateway têm finalidades distintas. [Diagrama completo e limites de rede](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/diagramas/COMPONENTES.md).
 
-Hom/develop e prd/main têm configurações separadas, uma VPC/EKS por ambiente, um nó t3.small (mínimo/desejado/máximo 1). HPA da API permite 1–3 réplicas, sem ampliar nós ou garantir alta disponibilidade. Metrics Server e Pod Identity Agent estão previstos; não há EBS CSI em uso. EKS, NLB e identidade do Collector pertencem à base, RDS ao banco, regras de saída da autenticação ao SAM.
+Hom/develop e prd/main têm configurações separadas, uma VPC/EKS por ambiente, um nó t3.small (mínimo/desejado/máximo 1). HPA da API permite 1–3 réplicas, sem ampliar nós ou garantir alta disponibilidade. Metrics Server e Pod Identity Agent são declarados como add-ons do EKS; não há EBS CSI em uso. EKS, NLB e identidade do Collector pertencem à base, RDS ao banco, regras de saída da autenticação ao SAM.
 
 ## Ferramentas e validação local
 
@@ -49,11 +69,11 @@ Esses comandos validam configuração; não aplicam recursos nem substituem plan
 | gateway-provision / gateway-destroy | Mesmo fluxo, para a unidade Gateway |
 | newrelic-provision | Manual, somente main, plano → aprovação → apply dos dashboards/alertas persistentes |
 
-OIDC identifica cada execução na conta 121754142617/us-east-1. Branches e Environments separam hom/prd. Um plano obsoleto exige execução completa e nova aprovação, sem replan automático. A diferença entre este fluxo manual e o requisito original R06 está registrada, com revisão adiada pelo mantenedor; não descrever como deploy automático por push.
+OIDC identifica cada execução na conta 121754142617/us-east-1. Branches e Environments separam hom/prd. Um plano obsoleto exige execução completa e nova aprovação, sem replan automático. O fluxo manual não implementa o deploy automático por push exigido no requisito original; os gatilhos permanecem manuais por decisão do mantenedor.
 
-Provisionar bootstrap aprovado → base → banco/Job → API e autenticação → Gateway. API e autenticação precisam do banco e podem ser preparadas independentemente entre si. O Gateway deve consumir a versão numérica publicada pela autenticação. O catálogo SSM v2 fornece configuração, não sinal de prontidão; não há publicador `/api/v2/` no código entregue.
+Provisionar bootstrap aprovado → base/Collector/SMTP4dev → banco/Job e email → API e autenticação → Gateway. Banco e email podem seguir independentemente entre si; API/auth precisam dos dois antes de implantar. O Gateway deve consumir a versão numérica publicada pela autenticação. O catálogo SSM v2 fornece configuração, não sinal de prontidão; não há publicador `/api/v2/` no código entregue.
 
-Destruir Gateway → API e autenticação → banco/email → base; API/auth verificam Gateway; banco verifica API/auth e resíduos associados; base verifica banco e email (função, ENIs e egress no SG reservado). Base/banco repetem as verificações antes do plan e do apply. Recursos ainda em exclusão e falhas de consulta bloqueiam; não há espera por ENIs, remoção automática de finalizadores ou coordenação entre execuções concorrentes.
+Destruir Gateway → API e autenticação → banco/email → base; API/auth verificam Gateway; banco verifica API/auth e resíduos associados; email verifica API/auth; base verifica banco e email (função, ENIs e egress no SG reservado). Base/banco repetem as verificações antes do plan e do apply. Recursos ainda em exclusão e falhas de consulta bloqueiam; não há espera por ENIs, remoção automática de finalizadores ou coordenação entre execuções concorrentes.
 
 base-provision aplica o Collector separadamente da Kustomization raiz, reinicia e aguarda rollout por 300 segundos. base-destroy remove o overlay do Collector antes dos demais manifestos e do Terraform. Atualizações isoladas do ConfigMap exigem restart.
 
