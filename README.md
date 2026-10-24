@@ -1,6 +1,6 @@
 # Gerenciamento Mecânica — Infraestrutura
 
-Infraestrutura AWS em Terraform, manifestos Kubernetes e configuração do New Relic para a oficina. **Consolidação de 23/10/2026:** E5/E6 encerradas no escopo acordado; hom foi recriado e a AE.10 comprovou autenticação por código/envio privado. [Estado e fontes atuais](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/CONSOLIDACAO_ENTREGA_2026-10-23.md). O descarte/custo de 21/10 é histórico, sem certificar ausência atual, prd, carga ou concorrência.
+Infraestrutura AWS em Terraform, manifestos Kubernetes, Gateway, SMTP4dev privado e configuração New Relic para a oficina.
 
 ## Unidades e arquitetura
 
@@ -53,7 +53,7 @@ OIDC identifica cada execução na conta 121754142617/us-east-1. Branches e Envi
 
 Provisionar bootstrap aprovado → base → banco/Job → API e autenticação → Gateway. API e autenticação precisam do banco e podem ser preparadas independentemente entre si. O Gateway deve consumir a versão numérica publicada pela autenticação. O catálogo SSM v2 fornece configuração, não sinal de prontidão; não há publicador `/api/v2/` no código entregue.
 
-Destruir Gateway → API e autenticação → banco/email → base; email entra na cadeia quando sua função e workflow forem publicados na AE.8. API/auth verificam Gateway; banco verifica API/auth e resíduos associados; base verifica banco e email (função, ENIs e egress no SG reservado). Base/banco repetem as verificações antes do plan e do apply. Recursos ainda em exclusão e falhas de consulta bloqueiam; não há espera por ENIs, remoção automática de finalizadores ou coordenação entre execuções concorrentes. [Mapa de descarte](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/DESTRUICAO_AMBIENTE.md).
+Destruir Gateway → API e autenticação → banco/email → base; API/auth verificam Gateway; banco verifica API/auth e resíduos associados; base verifica banco e email (função, ENIs e egress no SG reservado). Base/banco repetem as verificações antes do plan e do apply. Recursos ainda em exclusão e falhas de consulta bloqueiam; não há espera por ENIs, remoção automática de finalizadores ou coordenação entre execuções concorrentes.
 
 base-provision aplica o Collector separadamente da Kustomization raiz, reinicia e aguarda rollout por 300 segundos. base-destroy remove o overlay do Collector antes dos demais manifestos e do Terraform. Atualizações isoladas do ConfigMap exigem restart.
 
@@ -69,42 +69,24 @@ Collector Contrib 0.161.0 em observability, uma réplica/Recreate, requests 100m
 
 A License Key de ingestão fica no Secrets Manager, lida pelo provider nativo alpha dos Collectors. Não está no código, estado Terraform, GitHub Secret, variável Lambda ou Kubernetes Secret. Pod Identity identifica o Collector; a extensão compartilha a role da Lambda. Mudanças da chave exigem reinicializar o Collector e publicar nova revisão da função.
 
-E5 encerrada por aceite em hom: ingestão, métricas, logs, SQL, ciclo Lambda e três alertas foram conferidos conforme [evidências e dispensas](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/ENCERRAMENTO_E5_2026-10-21.md). Não foram feitos disparos de CPU/memória nem carga. Não tratar limites aceitos como comprovação desses cenários.
-
 ## Dashboards e alertas persistentes
 
 A unidade [observability/newrelic](observability/newrelic/README.md) administra os dashboards **Operação da API e Kubernetes**, **Ordens de serviço** e **Integrações e autenticação**, com filtro hom/prd. Cinco alertas: falha técnica de OS, falha de notificação, CPU sobre alocável >80%, working set sobre alocável >85% e API sem réplica disponível. Condições separadas hom/prd; ausência de sinal encerra sem comprovar recuperação. A disponibilidade inclui escala intencional para zero; manutenção exige silenciamento manual.
 
 newrelic-provision usa Environments newrelic/newrelic-approval, User API Key e variável NEW_RELIC_ALERT_EMAIL, sem imprimir destinatário. A User API Key administra recursos e não substitui a License Key de ingestão. Backend compartilhado shared/newrelic/terraform.tfstate, locking, workspace default e proteção prevent_destroy. Os dashboards/alertas já foram publicados e conferidos; persistem após descartar o ambiente AWS. Não executar Terraform local em concorrência com a pipeline.
 
-O encerramento preserva bootstrap, buckets/artefatos, ECR, IAM, Secrets e New Relic. O relatório de custos distingue recursos descartados de resíduos históricos e consumo estimado; ausência de workloads não significa custo futuro zero.
+Os destroys de hom/prd preservam bootstrap, buckets/artefatos, ECR, IAM, Secrets e New Relic. Ausência de workloads não implica custo futuro zero.
 
-## Procedimentos e contratos
+## Fontes principais
 
-- [Bootstrap administrativo](bootstrap/README.md)
-- [Workflows da base](docs/PIPELINES_BASE.md)
-- [Gateway e contrato público](docs/GATEWAY.md)
-- [NLB interno](docs/NLB_INTERNO.md)
-- [Catálogo base SSM v2](docs/METADADOS_BASE.md)
-- [JWT compartilhado](docs/JWT_COMPARTILHADO.md)
-- [Runtime da API](docs/API_RUNTIME.md)
-- [Collector e Kubernetes](docs/COLLECTOR_API.md)
-- [CloudWatch](docs/CLOUDWATCH.md)
-- [New Relic e rotação](docs/NEW_RELIC.md)
-- [Contratos entre repositórios](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/CONTRATOS_ENTRE_REPOSITORIOS.md)
-- [Revisão documental E7](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/REVISAO_DOCUMENTACAO_E7_2026-10-21.md)
+- [Bootstrap](bootstrap/README.md)
+- [Base Terraform](terraform)
+- [Gateway Terraform](gateway)
+- [SMTP4dev](kubernetes/smtp4dev)
+- [Collector Kubernetes](kubernetes/observability)
+- [Dashboards e alertas](observability/newrelic/README.md)
+- [Arquitetura e contratos](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/README.md)
+- [Swagger/Postman da API](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/postman/README.md)
+- [OpenAPI da autenticação](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/contracts/openapi.json)
 
-O endpoint Gateway é publicado por ambiente no catálogo e resumo do provisionamento. Hom foi recriado para AE/apresentação; URLs de validações são evidências datadas, sem garantia de disponibilidade contínua. Nenhum novo recurso foi criado para esta revisão documental.
-
-
-## Autenticação e captura SMTP — AE concluída em hom
-
-Em 23/10/2026, SMTP4dev privado/efêmero no EKS, listener SMTP do NLB e consumo IAM por EmailFunction foram conferidos na AWS. API/auth invocam o alias email live do ambiente; somente AuthFunction é exposta pelo Gateway para request-code/verify-code. Não há Authorizer, Function URL email, relay externo ou persistência da caixa.
-
-[Fluxo AWS](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE10_VALIDACAO_HOM_2026-10-23.md) · [SQL/limites/inativação](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE10_CONFERENCIAS_FINAIS_HOM_2026-10-23.md) · [Consolidação da entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/CONSOLIDACAO_ENTREGA_2026-10-23.md). O bootstrap adicional foi aprovado/aplicado e AWS_EMAIL_ROLE_ARN hom/prd cadastrada; configuração prd não comprova sua operação.
-
-Referências: [IAM](docs/AE4_IAM_EMAIL.md), [manifestos SMTP4dev](docs/AE4_SMTP4DEV_MANIFESTOS.md), [rede SMTP](docs/AE4_REDE_SMTP.md), [bloqueios de descarte](docs/AE4_INSPECAO_E_DESCARTE.md) e [workflows/Gateway](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE8_WORKFLOWS_E_GATEWAY.md). Esses documentos preservam o alcance da preparação local; os relatórios AE.10 registram a comprovação posterior.
-
-Provisionar: **bootstrap → base/Collector/SMTP4dev → banco/Job e email → API/auth → Gateway**. Descartar: **Gateway → API/auth → banco/email → base**. Banco e email podem seguir independentemente depois de seus consumidores. Email-destroy exige API/auth ausentes; base-destroy exige banco/email. [Mapa atual](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/DESTRUICAO_AMBIENTE.md). Não houve novo ensaio de destroy email na AE.10 nem operação remota nesta consolidação.
-
-A interface SMTP4dev permanece ClusterIP e acessível por port-forward autenticado em loopback; a caixa reinicia vazia. Sem exposição pública, entrega externa ou garantia única. Nova operação depende do mantenedor. E7 ainda requer vídeo/PDF/submissão; o transporte serverless já existe e somente o desacoplamento assíncrono permanece evolução futura.
+O endpoint do ambiente é publicado em /mecanica/<ambiente>/gateway/v2/endpoint e no resumo do workflow Gateway. A interface SMTP4dev permanece privada, com acesso por port-forward autenticado em loopback; a caixa é efêmera e não envia mensagens externas.
