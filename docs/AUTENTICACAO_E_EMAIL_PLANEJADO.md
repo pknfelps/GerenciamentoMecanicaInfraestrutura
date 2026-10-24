@@ -1,5 +1,10 @@
 # Infraestrutura planejada — autenticação e captura SMTP
 
+**Estado em 23/10/2026: implementado e comprovado em hom; AE.10 concluída.** [Consolidação atual](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/CONSOLIDACAO_ENTREGA_2026-10-23.md) · [Fluxo AWS](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE10_VALIDACAO_HOM_2026-10-23.md) · [Conferências finais](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE10_CONFERENCIAS_FINAIS_HOM_2026-10-23.md). Este arquivo conserva o desenho datado; imperativos e pendências abaixo descrevem o planejamento original. Para operação atual, seguir README/procedimentos vigentes. Não certifica prd ou envio externo.
+
+<details>
+<summary>Desenho e etapas históricas da extra AE</summary>
+
 **22/10/2026 — plano de infraestrutura com avanços locais registrados abaixo.** Sem aplicação AWS nesta preparação. [Plano extra AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md), independente de E5/E6/E7. O repositório de funções já foi renomeado GerenciamentoMecanicaServerless na AE.2 e administrará auth/email em duas stacks SAM separadas.
 
 ## Responsabilidades a implementar
@@ -72,3 +77,5 @@ Terraform fmt/init sem backend/validate aprovados, com lockfile/providers preser
 [View/default e bloqueios da base](AE4_INSPECAO_E_DESCARTE.md) implementados: a pipeline email pode inspecionar os consumidores da API; base-destroy verifica função email, ENIs e egress antes do plan e antes da limpeza/apply, além do banco. SG reservado isolado é permitido. Erros e resíduos bloqueiam imediatamente. Bootstrap troca GetFunctionConfiguration pela listagem Lambda regional em JSON, sem escrita/Invoke ou acesso a Secrets.
 
 Terraform da base/bootstrap e actionlint/ShellCheck aprovados; policy base-email com 3.112 caracteres por ambiente. Preparação local AE.4 concluída, sem aplicação/comprovação AWS. EmailFunction segue na AE.5; email-destroy e seus próprios bloqueios seguem junto dos workflows na AE.8. Registros anteriores descrevem o estado de cada etapa; os aceites oficiais E5/E6/E7 permanecem intactos.
+
+</details>

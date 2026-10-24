@@ -1,6 +1,6 @@
 # Gerenciamento Mecânica — Infraestrutura
 
-Infraestrutura AWS em Terraform, manifestos Kubernetes e configuração do New Relic para o sistema de gerenciamento de oficina. **Estado em 21/10/2026:** hom implantado, validado e depois destruído pelo mantenedor. E5/E6 encerradas no escopo acordado, sem comprovação de prd, coexistência, carga, rollback ou concorrência de publicação. [Encerramento e custos](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/ENCERRAMENTO_E6_E_CUSTOS_2026-10-21.md).
+Infraestrutura AWS em Terraform, manifestos Kubernetes e configuração do New Relic para a oficina. **Consolidação de 23/10/2026:** E5/E6 encerradas no escopo acordado; hom foi recriado e a AE.10 comprovou autenticação por código/envio privado. [Estado e fontes atuais](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/CONSOLIDACAO_ENTREGA_2026-10-23.md). O descarte/custo de 21/10 é histórico, sem certificar ausência atual, prd, carga ou concorrência.
 
 ## Unidades e arquitetura
 
@@ -12,7 +12,7 @@ Infraestrutura AWS em Terraform, manifestos Kubernetes e configuração do New R
 | gateway | REST API Regional, VPC Link V2, integrações HTTP/Lambda, access logs e catálogo SSM Gateway v2 |
 | observability/newrelic | Três dashboards, cinco alertas e notificações, com estado persistente independente do destroy AWS |
 
-O [banco](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados) administra RDS/SQL/Job. A [API](https://github.com/pknfelps/GerenciamentoMecanicaSistema) administra seu Deployment/HPA/ServiceAccount. A [autenticação](https://github.com/pknfelps/GerenciamentoMecanicaServerless) usa SAM/CloudFormation e ZIP; sua role runtime é persistente no bootstrap.
+O [banco](https://github.com/pknfelps/GerenciamentoMecanicaBancoDados) administra RDS/SQL/Job. A [API](https://github.com/pknfelps/GerenciamentoMecanicaSistema) administra seu Deployment/HPA/ServiceAccount. [Serverless](https://github.com/pknfelps/GerenciamentoMecanicaServerless) administra auth/email por SAM/CloudFormation e ZIPs; as roles runtime são persistentes no bootstrap.
 
 Gateway público HTTPS → VPC Link → NLB interno HTTP/80 → NodePort/30080 → API/8080. A outra integração chama uma versão numérica da Lambda. API, Lambda e RDS usam rede privada; NAT atende saídas necessárias. Endpoint administrativo EKS e endpoint público Gateway têm finalidades distintas. [Diagrama completo e limites de rede](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/diagramas/COMPONENTES.md).
 
@@ -94,25 +94,17 @@ O encerramento preserva bootstrap, buckets/artefatos, ECR, IAM, Secrets e New Re
 - [Contratos entre repositórios](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/arquitetura/CONTRATOS_ENTRE_REPOSITORIOS.md)
 - [Revisão documental E7](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/REVISAO_DOCUMENTACAO_E7_2026-10-21.md)
 
-O endpoint Gateway é publicado por ambiente no catálogo e resumo do provisionamento. Como o ambiente foi destruído, URLs de validações anteriores são evidências históricas, não um deploy ativo. Nenhum novo recurso foi criado para esta revisão documental.
+O endpoint Gateway é publicado por ambiente no catálogo e resumo do provisionamento. Hom foi recriado para AE/apresentação; URLs de validações são evidências datadas, sem garantia de disponibilidade contínua. Nenhum novo recurso foi criado para esta revisão documental.
 
 
-## Extra planejado — autenticação e captura SMTP
+## Autenticação e captura SMTP — AE concluída em hom
 
-Decisão de 22/10/2026, ainda sem implantação: SMTP4dev privado/efêmero no EKS, sem relay externo, com envio centralizado em EmailFunction invocada por API/auth. O cliente solicita/confirma o código e recebe JWT Customer; sem Authorizer ou token por OS. O repositório já renomeado GerenciamentoMecanicaServerless reunirá as funções, com dois SAM/stacks e workflows independentes/reutilizáveis. A migração inclui OIDC, rotas/permissões Gateway, catálogo de envio e novos bloqueios: email exige API/auth removidas; base exige banco e email ausentes. A ordem operacional atual só muda quando essa implementação for publicada. [Escopo de infraestrutura](docs/AUTENTICACAO_E_EMAIL_PLANEJADO.md) · [Plano AE.1–AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/PLANO_EXTRA_AUTENTICACAO_E_EMAIL.md). Checklists oficiais preservados.
+Em 23/10/2026, SMTP4dev privado/efêmero no EKS, listener SMTP do NLB e consumo IAM por EmailFunction foram conferidos na AWS. API/auth invocam o alias email live do ambiente; somente AuthFunction é exposta pelo Gateway para request-code/verify-code. Não há Authorizer, Function URL email, relay externo ou persistência da caixa.
 
-AE.4: [IAM do envio preparado e validado localmente](docs/AE4_IAM_EMAIL.md), com roles próprias email e consumo restrito por API/auth. [Manifestos SMTP4dev e captura efêmera validados localmente](docs/AE4_SMTP4DEV_MANIFESTOS.md), incluídos na raiz Kubernetes. [Rede privada SMTP e chaves SSM preparadas e validadas localmente](docs/AE4_REDE_SMTP.md), reutilizando NLB/ASG existentes. [Inspeção View/default e bloqueio base-destroy por email preparados e validados localmente](docs/AE4_INSPECAO_E_DESCARTE.md). Preparação local AE.4 concluída; aplicação e comprovação AWS pendentes. [EmailFunction preparada e validada localmente na AE.5](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE5_EMAIL_FUNCTION.md); workflow próprio de descarte segue na AE.8; nenhum plano/apply AWS nesta preparação.
+[Fluxo AWS](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE10_VALIDACAO_HOM_2026-10-23.md) · [SQL/limites/inativação](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE10_CONFERENCIAS_FINAIS_HOM_2026-10-23.md) · [Consolidação da entrega](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/CONSOLIDACAO_ENTREGA_2026-10-23.md). O bootstrap adicional foi aprovado/aplicado e AWS_EMAIL_ROLE_ARN hom/prd cadastrada; configuração prd não comprova sua operação.
 
-## Extra AE.8 — workflows das duas funções e Gateway
+Referências: [IAM](docs/AE4_IAM_EMAIL.md), [manifestos SMTP4dev](docs/AE4_SMTP4DEV_MANIFESTOS.md), [rede SMTP](docs/AE4_REDE_SMTP.md), [bloqueios de descarte](docs/AE4_INSPECAO_E_DESCARTE.md) e [workflows/Gateway](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE8_WORKFLOWS_E_GATEWAY.md). Esses documentos preservam o alcance da preparação local; os relatórios AE.10 registram a comprovação posterior.
 
-[Preparação local concluída em 22/10/2026](https://github.com/pknfelps/GerenciamentoMecanicaServerless/blob/develop/docs/AE8_WORKFLOWS_E_GATEWAY.md): auth/email têm entradas independentes e quatro reutilizáveis nativos; artefatos/checksums/VersionId separados, alias email live e versão numérica auth. Gateway exige OpenAPI auth 2.0.0 e publica somente request-code/verify-code, com permissões específicas; sem Authorizer ou endpoint email público.
+Provisionar: **bootstrap → base/Collector/SMTP4dev → banco/Job e email → API/auth → Gateway**. Descartar: **Gateway → API/auth → banco/email → base**. Banco e email podem seguir independentemente depois de seus consumidores. Email-destroy exige API/auth ausentes; base-destroy exige banco/email. [Mapa atual](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/DESTRUICAO_AMBIENTE.md). Não houve novo ensaio de destroy email na AE.10 nem operação remota nesta consolidação.
 
-Bootstrap completa a autorização de contracts/email/*, leitura das duas chaves email/v1 nas pipelines API/auth e ref develop/hom ou main/prd da trust email. Apply dessas permissões e cadastro de AWS_EMAIL_ROLE_ARN nos Environments dependem de execução posterior autorizada; não foram realizados nesta implementação. Roles separadas compartilham subject de Environment, sem isolamento IAM por arquivo workflow.
-
-Provisionar: bootstrap/base com SMTP4dev → banco e email → API/auth → Gateway. Descartar: Gateway → API/auth → banco/email → base. Email-destroy exige API/auth removidas; base-destroy já exige banco/email. Ver [Gateway](docs/GATEWAY.md) e [bloqueios da base](docs/AE4_INSPECAO_E_DESCARTE.md). Os workflows da infraestrutura preservam planos salvos/aprovações; não foram executados. Próxima etapa local AE.9; comprovação AWS AE.10.
-
-## Extra AE.9 — validação local e documentos, 23/10/2026
-
-[Registro conjunto e roteiro AE.10](https://github.com/pknfelps/GerenciamentoMecanicaSistema/blob/develop/docs/AE9_VALIDACAO_LOCAL_E_DOCUMENTACAO.md). Postman/contratos/diagramas atualizados; captura real por SDK/SAM/SMTP4dev, código/JWT e operações Customer da API conferidos localmente. Falha SMTP preservou OS; perda da caixa exigiu novo pedido, sem relay/dados sensíveis em logs. Docker exclusivo do ensaio removido; sem AWS ou workflow remoto.
-
-Bootstrap/base/Gateway/New Relic passaram fmt, init/validate com backend desabilitado e TF_DATA_DIR isolado; Kustomize e actionlint/ShellCheck aprovados. Não foram alterados Terraform, manifestos, policies, workflows, Collector ou dashboards nesta etapa. IAM/NLB/SG/capacidade/cold start reais e publicação do novo fluxo permanecem na AE.10 autorizada.
+A interface SMTP4dev permanece ClusterIP e acessível por port-forward autenticado em loopback; a caixa reinicia vazia. Sem exposição pública, entrega externa ou garantia única. Nova operação depende do mantenedor. E7 ainda requer vídeo/PDF/submissão; o transporte serverless já existe e somente o desacoplamento assíncrono permanece evolução futura.
