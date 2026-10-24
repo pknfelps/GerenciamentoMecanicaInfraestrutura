@@ -13,7 +13,7 @@ resource "newrelic_nrql_alert_condition" "orders_notifications" {
   name       = "Mecânica — ${each.key} — Falha de notificação de OS"
   description = join(" ", [
     "Pelo menos uma falha no fluxo de notificação de OS em cinco minutos no ambiente ${each.key}, incluindo consultas, montagem e envio.",
-    "Em hom/prd, o envio é simulado; o alerta não comprova tentativa de entrega SMTP real.",
+    "Em hom/prd, a API invoca a EmailFunction, que transmite ao SMTP4dev privado; sucesso em mode=smtp significa captura, sem entrega externa ao destinatário. Registros históricos em mode=simulated representam somente simulação.",
     "A falha tratada da notificação não desfaz a operação persistida da OS.",
     "Encerramento após dez minutos sem pontos indica ausência de sinal, não recuperação, entrega posterior ou reprocessamento."
   ])
@@ -71,7 +71,7 @@ resource "newrelic_notification_channel" "orders_notifications" {
       Incidente: {{issuePageUrl}}
       Consulte o bloco de notificações do dashboard Integrações e autenticação, no ambiente e período do incidente: ${newrelic_one_dashboard_json.integrations.permalink}
       Investigue tipo/modo da notificação, logs sanitizados e traces disponíveis; não envie documentos, tokens, credenciais ou mensagens originais de exceção.
-      Em hom/prd, o envio é simulado; falha de notificação não desfaz a operação persistida da OS nem comprova tentativa de entrega SMTP real.
+      Em hom/prd, a API invoca a EmailFunction para captura no SMTP4dev privado. Sucesso em mode=smtp não comprova entrega externa; registros históricos em mode=simulated representam somente simulação. Falha de notificação não desfaz a operação persistida da OS.
       Encerramento por dez minutos sem pontos significa ausência de sinal, não recuperação, entrega posterior ou reprocessamento.
     DETAILS
   }
