@@ -19,6 +19,9 @@ locals {
     "init-namespace"            = "database-init"
     "api-security-group-id"     = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
     "auth-security-group-id"    = aws_security_group.auth.id
+    "email-security-group-id"   = aws_security_group.email.id
+    "smtp-host"                 = aws_lb.api.dns_name
+    "smtp-port"                 = tostring(aws_lb_listener.smtp.port)
     "gateway-security-group-id" = aws_security_group.gateway.id
     "init-security-group-id"    = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
     "api-service-name"          = "svc-gerenciamento-api"

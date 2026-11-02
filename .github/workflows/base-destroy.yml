@@ -83,6 +83,35 @@ jobs:
             exit 1
           fi
 
+      - name: Check email removal
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENVIRONMENT" in hom|prd) ;; *) exit 1 ;; esac
+          test "$AWS_REGION" = us-east-1
+          name="mecanica-$TARGET_ENVIRONMENT-email"
+          functions="$(aws lambda list-functions --query "Functions[?FunctionName=='$name'].FunctionName" --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$functions" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: Lambda $name encontrada ou resposta invalida. Conclua email-destroy."
+            exit 1
+          fi
+
+          groups="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$name" \
+            --query 'SecurityGroups[].{Id:GroupId,Egress:IpPermissionsEgress}' --output json)"
+          if ! jq -e 'type == "array" and all(.[]; (.Id | type == "string" and startswith("sg-")) and (.Egress | type == "array" and length == 0))' \
+            <<< "$groups" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: regras de saida de $name remanescentes ou resposta invalida. Conclua email-destroy."
+            exit 1
+          fi
+          group_ids="$(jq -r '.[].Id' <<< "$groups")"
+          for group in $group_ids; do
+            interfaces="$(aws ec2 describe-network-interfaces --filters "Name=group-id,Values=$group" \
+              --query 'NetworkInterfaces[].NetworkInterfaceId' --output json)"
+            if ! jq -e 'type == "array" and length == 0' <<< "$interfaces" > /dev/null; then
+              echo "::error::$TARGET_ENVIRONMENT: ENIs de email no SG $group pendentes ou resposta invalida. Aguarde a liberacao e repita email-destroy."
+              exit 1
+            fi
+          done
+
       - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
       - run: terraform validate -no-color
       - run: terraform plan -destroy -var-file="environments/$TARGET_ENVIRONMENT.tfvars" -out=tfplan -no-color -lock-timeout=60s
@@ -164,6 +193,35 @@ jobs:
             echo "::error::$TARGET_ENVIRONMENT: SG $name encontrado ou resposta invalida. Conclua database-destroy."
             exit 1
           fi
+
+      - name: Check email removal
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENVIRONMENT" in hom|prd) ;; *) exit 1 ;; esac
+          test "$AWS_REGION" = us-east-1
+          name="mecanica-$TARGET_ENVIRONMENT-email"
+          functions="$(aws lambda list-functions --query "Functions[?FunctionName=='$name'].FunctionName" --output json)"
+          if ! jq -e 'type == "array" and length == 0' <<< "$functions" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: Lambda $name encontrada ou resposta invalida. Conclua email-destroy."
+            exit 1
+          fi
+
+          groups="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$name" \
+            --query 'SecurityGroups[].{Id:GroupId,Egress:IpPermissionsEgress}' --output json)"
+          if ! jq -e 'type == "array" and all(.[]; (.Id | type == "string" and startswith("sg-")) and (.Egress | type == "array" and length == 0))' \
+            <<< "$groups" > /dev/null; then
+            echo "::error::$TARGET_ENVIRONMENT: regras de saida de $name remanescentes ou resposta invalida. Conclua email-destroy."
+            exit 1
+          fi
+          group_ids="$(jq -r '.[].Id' <<< "$groups")"
+          for group in $group_ids; do
+            interfaces="$(aws ec2 describe-network-interfaces --filters "Name=group-id,Values=$group" \
+              --query 'NetworkInterfaces[].NetworkInterfaceId' --output json)"
+            if ! jq -e 'type == "array" and length == 0' <<< "$interfaces" > /dev/null; then
+              echo "::error::$TARGET_ENVIRONMENT: ENIs de email no SG $group pendentes ou resposta invalida. Aguarde a liberacao e repita email-destroy."
+              exit 1
+            fi
+          done
 
       - name: Configure Kubernetes access
         run: aws eks update-kubeconfig --region us-east-1 --name "mecanica-$TARGET_ENVIRONMENT-eks"

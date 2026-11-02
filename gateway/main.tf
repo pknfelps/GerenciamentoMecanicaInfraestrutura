@@ -34,6 +34,7 @@ resource "aws_api_gateway_rest_api" "gateway" {
       condition = (
         startswith(local.api_contract.openapi, "3.0.") &&
         startswith(local.auth_contract.openapi, "3.0.") &&
+        local.auth_contract.info.version == "2.0.0" &&
         local.auth["auth-contracts-version"] == "1.0.0" &&
         local.auth["openapi-key"] == "contracts/auth/${var.auth_commit}/openapi.json" &&
         local.auth["function-name"] == "${local.name_prefix}-auth" &&
@@ -46,12 +47,12 @@ resource "aws_api_gateway_rest_api" "gateway" {
       condition = (
         length(local.api_operations) > 0 &&
         length(distinct([for route in local.api_operations : route.key])) == length(local.api_operations) &&
-        length(local.auth_operations) == 1 &&
-        alltrue([for route in local.auth_operations : route.key == "POST /customers/validate"]) &&
+        length(local.auth_operations) == 2 &&
+        toset([for route in local.auth_operations : route.key]) == toset(["POST /customers/auth/request-code", "POST /customers/auth/verify-code"]) &&
         length(setintersection(toset([for route in local.api_operations : route.key]), toset([for route in local.auth_operations : route.key]))) == 0 &&
         alltrue([for route in concat(local.api_operations, local.auth_operations) : !strcontains(route.path, "{proxy+")])
       )
-      error_message = "Os contratos devem conter rotas explicitas sem conflitos e somente POST /customers/validate na autenticacao."
+      error_message = "Os contratos devem conter rotas explicitas sem conflitos e somente POST /customers/auth/request-code e POST /customers/auth/verify-code na autenticacao (OpenAPI 2.0.0)."
     }
     precondition {
       condition = (
@@ -71,14 +72,15 @@ resource "aws_api_gateway_rest_api" "gateway" {
   }
 }
 
-resource "aws_lambda_permission" "validate_customer" {
-  statement_id_prefix = "gateway-validate-"
+resource "aws_lambda_permission" "customer_auth" {
+  for_each            = toset(["request-code", "verify-code"])
+  statement_id_prefix = "gateway-${each.key}-"
   action              = "lambda:InvokeFunction"
   function_name       = local.auth["function-name"]
   qualifier           = local.auth_version
   principal           = "apigateway.amazonaws.com"
   source_account      = "121754142617"
-  source_arn          = "${aws_api_gateway_rest_api.gateway.execution_arn}/${var.environment}/POST/customers/validate"
+  source_arn          = "${aws_api_gateway_rest_api.gateway.execution_arn}/${var.environment}/POST/customers/auth/${each.key}"
   lifecycle {
     create_before_destroy = true
   }
@@ -94,7 +96,7 @@ resource "aws_api_gateway_deployment" "gateway" {
       auth_sha256 = filesha256(var.auth_contract_file)
     }))
   }
-  depends_on = [aws_lambda_permission.validate_customer]
+  depends_on = [aws_lambda_permission.customer_auth]
   lifecycle {
     create_before_destroy = true
   }

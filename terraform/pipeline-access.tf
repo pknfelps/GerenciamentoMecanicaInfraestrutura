@@ -15,6 +15,11 @@ locals {
       policy = "AmazonEKSEditPolicy"
       scope  = "namespace"
     }
+    # Email somente inspeciona os consumidores da API em default antes do descarte.
+    email = {
+      policy = "AmazonEKSViewPolicy"
+      scope  = "namespace"
+    }
   }
 }
 
