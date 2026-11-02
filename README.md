@@ -87,7 +87,7 @@ Collector Contrib 0.161.0 em observability, uma réplica/Recreate, requests 100m
 - 23 métricas Kubernetes a cada 30 segundos: nós, pods, containers e disponibilidade. Kubeletstats acompanha somente o nó do Collector; mudança permanente de topologia exige revisão.
 - 13 estatísticas CloudWatch Gateway/Lambda/RDS: período/coleta de 60 segundos, atraso de dez minutos. Logs do Gateway retomam os últimos cinco minutos a cada inicialização, sem checkpoint persistente ou deduplicação. Lacunas/duplicações são aceitas.
 - A Lambda tem Collector próprio como extensão; não envia seus sinais ao Collector EKS.
-- Aplicações usam propagação W3C. X-Ray nativo é independente, com integração por polling no New Relic, sem união automática entre os dois caminhos. Gateway hom solicita X-Ray; prd mantém false. Segmentos nativos não passam pela sanitização da aplicação.
+- Aplicações usam propagação W3C. X-Ray nativo é independente, com integração por polling no New Relic, sem união automática entre os dois caminhos. Gateway hom e prd solicitam X-Ray. Segmentos nativos não passam pela sanitização da aplicação.
 
 A License Key de ingestão fica no Secrets Manager, lida pelo provider nativo alpha dos Collectors. Não está no código, estado Terraform, GitHub Secret, variável Lambda ou Kubernetes Secret. Pod Identity identifica o Collector; a extensão compartilha a role da Lambda. Mudanças da chave exigem reinicializar o Collector e publicar nova revisão da função.
 
