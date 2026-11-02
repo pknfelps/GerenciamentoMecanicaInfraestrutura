@@ -2,6 +2,11 @@ name: gateway-provision
 run-name: gateway-provision / ${{ inputs.environment }} / ${{ github.ref_name }}
 
 on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       environment:
@@ -50,6 +55,8 @@ jobs:
       id-token: write
     outputs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      api_commit: ${{ steps.revisions.outputs.api_commit }}
+      auth_commit: ${{ steps.revisions.outputs.auth_commit }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -62,8 +69,6 @@ jobs:
             hom:refs/heads/develop|prd:refs/heads/main) ;;
             *) echo '::error::Use develop/hom ou main/prd'; exit 1 ;;
           esac
-          [[ "$TF_VAR_api_commit" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$TF_VAR_auth_commit" =~ ^[0-9a-f]{40}$ ]]
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: 1.15.9
@@ -74,6 +79,46 @@ jobs:
           role-to-assume: ${{ vars.AWS_GATEWAY_ROLE_ARN }}
           allowed-account-ids: '121754142617'
           role-session-name: gateway-plan-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve and check deployed contract revisions
+        id: revisions
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            # A successful publication alone does not prove that the API was deployed.
+            # Require the latest deployment run of this branch to have finished successfully.
+            curl --fail --silent --show-error --location \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/pknfelps/GerenciamentoMecanicaSistema/actions/workflows/api-deploy.yml/runs?branch=$GITHUB_REF_NAME&per_page=1&exclude_pull_requests=true" \
+              --output "$RUNNER_TEMP/api-deployment.json"
+            TF_VAR_api_commit="$(jq -er --arg branch "$GITHUB_REF_NAME" '
+              .workflow_runs[0] | select(
+                .head_branch == $branch and .status == "completed" and .conclusion == "success" and
+                (.event == "push" or .event == "workflow_dispatch") and
+                .repository.full_name == "pknfelps/GerenciamentoMecanicaSistema"
+              ) | .head_sha | select(test("^[0-9a-f]{40}$"))
+            ' "$RUNNER_TEMP/api-deployment.json")" || {
+              echo '::error::Conclua api-deploy com sucesso na branch do ambiente antes de atualizar o Gateway.'
+              exit 1
+            }
+            auth_key="$(aws ssm get-parameter --name "/mecanica/$TARGET_ENVIRONMENT/auth/v2/openapi-key" \
+              --query Parameter.Value --output text)"
+            [[ "$auth_key" =~ ^contracts/auth/([0-9a-f]{40})/openapi\.json$ ]] || {
+              echo '::error::Conclua auth-provision e confira seu contrato SSM antes de atualizar o Gateway.'
+              exit 1
+            }
+            TF_VAR_auth_commit="${BASH_REMATCH[1]}"
+          fi
+          [[ "$TF_VAR_api_commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TF_VAR_auth_commit" =~ ^[0-9a-f]{40}$ ]]
+          {
+            echo "TF_VAR_api_commit=$TF_VAR_api_commit"
+            echo "TF_VAR_auth_commit=$TF_VAR_auth_commit"
+          } >> "$GITHUB_ENV"
+          {
+            echo "api_commit=$TF_VAR_api_commit"
+            echo "auth_commit=$TF_VAR_auth_commit"
+          } >> "$GITHUB_OUTPUT"
       - name: Download and verify published contracts
         run: |
           for component in api auth; do
@@ -118,6 +163,9 @@ jobs:
 
   apply:
     needs: [plan, approval]
+    env:
+      TF_VAR_api_commit: ${{ needs.plan.outputs.api_commit }}
+      TF_VAR_auth_commit: ${{ needs.plan.outputs.auth_commit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment: ${{ inputs.environment }}
