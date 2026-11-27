@@ -2,7 +2,7 @@
 locals {
   auth_runtime_parameters = [
     "base/v2/jwt-secret-arn", "base/v2/jwt-issuer", "base/v2/jwt-audience",
-    "database/v2/endpoint", "database/v2/port", "database/v2/database-name",
+    "database/v2/endpoint", "database/v2/port", "database/v2/auth-database-name",
     "database/v2/auth-secret-arn", "database/v2/auth-db-user", "database/v2/ssl-mode"
   ]
   auth_eni_actions = [
