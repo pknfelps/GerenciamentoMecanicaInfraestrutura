@@ -1,11 +1,12 @@
 # REST children inherit the API tags for IAM authorization.
 locals {
   gateway_metadata_read_fields = {
+    api = ["deployment"]
     base = [
       "vpc-id", "workload-subnet-ids", "gateway-security-group-id",
       "nlb-arn", "nlb-security-group-id", "nlb-listener-port", "nlb-listener-protocol", "api-integration-uri"
     ]
-    auth = ["function-name", "function-version", "invocation-arn", "openapi-key", "auth-contracts-version"]
+    auth = ["function-name", "function-version", "invocation-arn", "openapi-key", "auth-contracts-version", "api-sync-version"]
     gateway = [
       "rest-api-id", "vpc-link-id", "stage-name", "endpoint",
       "api-openapi-key", "auth-openapi-key", "auth-invocation-arn"

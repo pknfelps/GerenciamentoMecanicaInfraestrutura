@@ -83,34 +83,18 @@ jobs:
         id: revisions
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            # A successful publication alone does not prove that the API was deployed.
-            # Require the latest deployment run of this branch to have finished successfully.
-            curl --fail --silent --show-error --location \
-              -H 'Accept: application/vnd.github+json' \
-              -H 'X-GitHub-Api-Version: 2022-11-28' \
-              "https://api.github.com/repos/pknfelps/GerenciamentoMecanicaSistema/actions/workflows/api-deploy.yml/runs?branch=$GITHUB_REF_NAME&per_page=1&exclude_pull_requests=true" \
-              --output "$RUNNER_TEMP/api-deployment.json"
-            TF_VAR_api_commit="$(jq -er --arg branch "$GITHUB_REF_NAME" '
-              .workflow_runs[0] | select(
-                .head_branch == $branch and .status == "completed" and .conclusion == "success" and
-                (.event == "push" or .event == "workflow_dispatch") and
-                .repository.full_name == "pknfelps/GerenciamentoMecanicaSistema"
-              ) | .head_sha | select(test("^[0-9a-f]{40}$"))
-            ' "$RUNNER_TEMP/api-deployment.json")" || {
-              echo '::error::Conclua api-deploy com sucesso na branch do ambiente antes de atualizar o Gateway.'
-              exit 1
-            }
-            auth_key="$(aws ssm get-parameter --name "/mecanica/$TARGET_ENVIRONMENT/auth/v2/openapi-key" \
-              --query Parameter.Value --output text)"
-            [[ "$auth_key" =~ ^contracts/auth/([0-9a-f]{40})/openapi\.json$ ]] || {
-              echo '::error::Conclua auth-provision e confira seu contrato SSM antes de atualizar o Gateway.'
-              exit 1
-            }
-            TF_VAR_auth_commit="${BASH_REMATCH[1]}"
+          mkdir -p .inputs
+          bash ./resolve-release.sh > .inputs/release.json
+          api_commit="$(jq -er '.apiCommit' .inputs/release.json)"
+          auth_commit="$(jq -er '.authCommit' .inputs/release.json)"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] &&
+             { [ "$TF_VAR_api_commit" != "$api_commit" ] || [ "$TF_VAR_auth_commit" != "$auth_commit" ]; }; then
+            echo '::error::Informe os SHAs que estao implantados no ambiente.'
+            exit 1
           fi
-          [[ "$TF_VAR_api_commit" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$TF_VAR_auth_commit" =~ ^[0-9a-f]{40}$ ]]
+          TF_VAR_api_commit="$api_commit"
+          TF_VAR_auth_commit="$auth_commit"
+          printf '\nRevisoes implantadas no ambiente:\n\n`%s`\n' "$(cat .inputs/release.json)" >> "$GITHUB_STEP_SUMMARY"
           {
             echo "TF_VAR_api_commit=$TF_VAR_api_commit"
             echo "TF_VAR_auth_commit=$TF_VAR_auth_commit"
@@ -138,6 +122,10 @@ jobs:
       - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
       - run: terraform validate -no-color
       - run: terraform plan -var-file="environments/$TARGET_ENVIRONMENT.tfvars" -out=tfplan -no-color -lock-timeout=60s
+      - name: Confirm revisions remained consistent during planning
+        run: |
+          bash ./resolve-release.sh > "$RUNNER_TEMP/gateway-release.json"
+          cmp .inputs/release.json "$RUNNER_TEMP/gateway-release.json"
       - name: Present saved plan
         run: terraform show -no-color tfplan | tee tfplan.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -193,6 +181,13 @@ jobs:
           artifact-ids: ${{ needs.plan.outputs.artifact_id }}
           path: gateway
           merge-multiple: true
+      - name: Confirm approved revisions are still deployed
+        run: |
+          bash ./resolve-release.sh > "$RUNNER_TEMP/gateway-release.json"
+          cmp .inputs/release.json "$RUNNER_TEMP/gateway-release.json" || {
+            echo '::error::O deploy mudou apos o plano. Gere e aprove um novo plano do Gateway.'
+            exit 1
+          }
       - run: terraform init -backend-config="backends/$TARGET_ENVIRONMENT.hcl" -lockfile=readonly
       - name: Apply approved plan
         run: terraform apply -no-color -lock-timeout=60s tfplan
