@@ -124,6 +124,14 @@ locals {
           Resource = [for component in config.metadata_write : "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/${var.project_name}/${config.environment}/${component}/v1/*"]
         }] : [],
         config.component != "api" ? [] : [{
+          Sid    = "ReadAuthAliasVersion"
+          Effect = "Allow"
+          Action = ["lambda:GetAlias"]
+          Resource = [
+            "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${var.project_name}-${config.environment}-auth",
+            "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${var.project_name}-${config.environment}-auth:live"
+          ]
+          }, {
           Sid      = "EcrAuthentication"
           Effect   = "Allow"
           Action   = ["ecr:GetAuthorizationToken"]
