@@ -34,7 +34,7 @@ resource "aws_api_gateway_rest_api" "gateway" {
       condition = (
         startswith(local.api_contract.openapi, "3.0.") &&
         startswith(local.auth_contract.openapi, "3.0.") &&
-        local.auth_contract.info.version == "2.0.0" &&
+        local.auth_contract.info.version == "2.1.0" &&
         local.auth["auth-contracts-version"] == "1.0.0" &&
         local.auth["openapi-key"] == "contracts/auth/${var.auth_commit}/openapi.json" &&
         local.auth["function-name"] == "${local.name_prefix}-auth" &&
@@ -47,12 +47,19 @@ resource "aws_api_gateway_rest_api" "gateway" {
       condition = (
         length(local.api_operations) > 0 &&
         length(distinct([for route in local.api_operations : route.key])) == length(local.api_operations) &&
-        length(local.auth_operations) == 2 &&
-        toset([for route in local.auth_operations : route.key]) == toset(["POST /customers/auth/request-code", "POST /customers/auth/verify-code"]) &&
-        length(setintersection(toset([for route in local.api_operations : route.key]), toset([for route in local.auth_operations : route.key]))) == 0 &&
-        alltrue([for route in concat(local.api_operations, local.auth_operations) : !strcontains(route.path, "{proxy+")])
+        alltrue([for route in local.api_operations :
+          !contains(local.auth_owned_paths, lower(route.backend_path)) && !strcontains(route.backend_path, "{proxy+")
+        ]) &&
+        toset(keys(local.auth_contract.paths)) == toset([for route in values(local.auth_routes) : route.path]) &&
+        toset([for route in local.auth_operations : route.key]) == toset(keys(local.auth_routes_by_operation)) &&
+        alltrue([for route in local.auth_operations :
+          jsonencode(try(route.operation.security, null)) == (
+            try(local.auth_routes_by_operation[route.key].bearer, false) ? jsonencode([{ Bearer = [] }]) : jsonencode([])
+          )
+        ]) &&
+        try(local.auth_contract.components.securitySchemes.Bearer.type == "http" && local.auth_contract.components.securitySchemes.Bearer.scheme == "bearer", false)
       )
-      error_message = "Os contratos devem conter rotas explicitas sem conflitos e somente POST /customers/auth/request-code e POST /customers/auth/verify-code na autenticacao (OpenAPI 2.0.0)."
+      error_message = "A API deve expor rotas operacionais explicitas. O contrato da AuthFunction deve conter as sete operacoes de identidade com o casing e a seguranca aprovados."
     }
     precondition {
       condition = (
@@ -72,15 +79,25 @@ resource "aws_api_gateway_rest_api" "gateway" {
   }
 }
 
-resource "aws_lambda_permission" "customer_auth" {
-  for_each            = toset(["request-code", "verify-code"])
+moved {
+  from = aws_lambda_permission.customer_auth["request-code"]
+  to   = aws_lambda_permission.auth["request-code"]
+}
+
+moved {
+  from = aws_lambda_permission.customer_auth["verify-code"]
+  to   = aws_lambda_permission.auth["verify-code"]
+}
+
+resource "aws_lambda_permission" "auth" {
+  for_each            = local.auth_routes
   statement_id_prefix = "gateway-${each.key}-"
   action              = "lambda:InvokeFunction"
   function_name       = local.auth["function-name"]
   qualifier           = local.auth_version
   principal           = "apigateway.amazonaws.com"
   source_account      = "121754142617"
-  source_arn          = "${aws_api_gateway_rest_api.gateway.execution_arn}/${var.environment}/POST/customers/auth/${each.key}"
+  source_arn          = "${aws_api_gateway_rest_api.gateway.execution_arn}/${var.environment}/${each.value.method}${each.value.path}"
   lifecycle {
     create_before_destroy = true
   }
@@ -96,7 +113,7 @@ resource "aws_api_gateway_deployment" "gateway" {
       auth_sha256 = filesha256(var.auth_contract_file)
     }))
   }
-  depends_on = [aws_lambda_permission.customer_auth]
+  depends_on = [aws_lambda_permission.auth]
   lifecycle {
     create_before_destroy = true
   }

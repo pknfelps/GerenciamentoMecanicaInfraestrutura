@@ -4,6 +4,20 @@ locals {
   http_methods  = toset(["get", "post", "put", "patch", "delete", "head", "options"])
   private_paths = toset(["/health/live", "/health/startup", "/health/ready"])
 
+  auth_routes = {
+    request-code = { method = "POST", path = "/customers/auth/request-code", bearer = false }
+    verify-code  = { method = "POST", path = "/customers/auth/verify-code", bearer = false }
+    login        = { method = "POST", path = "/Authentication", bearer = false }
+    create-user  = { method = "POST", path = "/Users", bearer = true }
+    get-user     = { method = "GET", path = "/Users", bearer = true }
+    update-user  = { method = "PATCH", path = "/Users", bearer = true }
+    delete-user  = { method = "DELETE", path = "/Users", bearer = true }
+  }
+  auth_routes_by_operation = {
+    for route in values(local.auth_routes) : "${route.method} ${route.path}" => route
+  }
+  auth_owned_paths = toset([for route in values(local.auth_routes) : lower(route.path)])
+
   # REST API allows only one variable child per parent. Share the gateway path
   # across methods and keep each backend's original parameter name in the mapping.
   api_gateway_paths = {
@@ -39,7 +53,7 @@ locals {
         path      = path
         method    = method
         operation = operation
-      } if contains(local.http_methods, method)
+      } if contains(local.http_methods, method) || method == "trace"
     ]
   ])
 
@@ -77,6 +91,7 @@ locals {
   auth_paths = {
     for path in distinct([for route in local.auth_operations : route.path]) : path => {
       for route in local.auth_operations : route.method => {
+        # The Lambda validates the Authorization header and enforces roles for /Users.
         security = []
         responses = { for status, response in route.operation.responses : status => {
           description = try(response.description, "Resposta da autenticacao")
